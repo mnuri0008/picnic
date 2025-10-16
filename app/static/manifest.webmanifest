@@ -1,0 +1,1 @@
+{"name": "NURI \u2013 Piknik", "short_name": "Piknik", "display": "standalone", "start_url": "/", "background_color": "#0f172a", "theme_color": "#0f172a", "icons": [{"src": "/static/icons/icon-192.png", "type": "image/png", "sizes": "192x192"}, {"src": "/static/icons/icon-512.png", "type": "image/png", "sizes": "512x512"}]}

@@ -1,0 +1,62 @@
+{
+  "room": {
+    "created_at": "2025-10-16T17:28:08.901589Z",
+    "event_date": null,
+    "locked": false
+  },
+  "users": [
+    "nuri"
+  ],
+  "items": [
+    {
+      "id": 1,
+      "title": "salata",
+      "category": "Yiyecek",
+      "amount": 2.0,
+      "unit": "kg",
+      "who": "nuri",
+      "status": "needed"
+    },
+    {
+      "id": 2,
+      "title": "sekerpare",
+      "category": "Yiyecek",
+      "amount": 1.0,
+      "unit": "paket",
+      "who": "nuri",
+      "status": "needed"
+    },
+    {
+      "id": 3,
+      "title": "elma",
+      "category": "Yiyecek",
+      "amount": 1.0,
+      "unit": "kg",
+      "who": "nuri",
+      "status": "needed"
+    }
+  ],
+  "seq": 4,
+  "categories": [
+    "Yiyecek",
+    "İçecek",
+    "Baharat",
+    "Tatlı",
+    "Araç-gereç",
+    "Kahvaltılık",
+    "Meyve",
+    "Tatlı-Atıştırmalık",
+    "Mangal",
+    "Temizlik",
+    "Oyun/Eğlence",
+    "Diğer"
+  ],
+  "units": [
+    "kg",
+    "g",
+    "lt",
+    "ml",
+    "adet",
+    "paket"
+  ]
+}
