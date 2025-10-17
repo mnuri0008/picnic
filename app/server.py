@@ -1,223 +1,104 @@
 
 import os, json, threading, datetime
 from flask import Flask, jsonify, request, render_template, send_from_directory
-from flask_socketio import SocketIO, emit
+from flask_socketio import SocketIO
 from dotenv import load_dotenv
-
+from flask import request as _rq
 load_dotenv()
-DATA_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'picnic_data.json')
-_lock = threading.Lock()
-# in-memory presence
-presence = {}  # sid -> name
-
-def read_data():
-    if not os.path.exists(DATA_PATH):
-        return {"room":{"created_at":datetime.datetime.utcnow().isoformat()+'Z',"event_date":None,"locked":False},
-                "users":[], "items":[], "seq":1, "categories":["Yiyecek","İçecek","Baharat","Tatlı","Araç-gereç"], "units":["kg","g","lt","ml","adet","paket"]}
-    with open(DATA_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-def write_data(d):
-    tmp = DATA_PATH + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(d, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, DATA_PATH)
-
-def cleanup_if_expired(d):
-    # auto delete room if older than 7 days
-    try:
-        created = datetime.datetime.fromisoformat((d.get("room") or {}).get("created_at","").replace("Z","") or "1970-01-01")
-    except Exception:
-        created = datetime.datetime.utcnow()
-    if datetime.datetime.utcnow() - created > datetime.timedelta(days=7):
-        d["room"] = {"created_at": datetime.datetime.utcnow().isoformat()+"Z", "event_date": None, "locked": False}
-        d["users"] = []
-        d["items"] = []
-        d["seq"] = 1
-    # lock date if less than 2 days remain
-    ev = (d.get("room") or {}).get("event_date")
+DATA_PATH=os.path.join(os.path.dirname(__file__),'..','data','picnic_data.json')
+_lock=threading.Lock(); presence={}
+def read():
+    with open(DATA_PATH,'r',encoding='utf-8') as f: return json.load(f)
+def write(d):
+    tmp=DATA_PATH+'.tmp'
+    with open(tmp,'w',encoding='utf-8') as f: json.dump(d,f,ensure_ascii=False,indent=2)
+    os.replace(tmp,DATA_PATH)
+def ensure_rules(d):
+    created=datetime.datetime.fromisoformat(d['room']['created_at'].replace('Z',''))
+    if datetime.datetime.utcnow()-created>datetime.timedelta(days=7):
+        d['room']={'created_at':datetime.datetime.utcnow().isoformat()+'Z','event_date':None,'locked':False}
+        d['users']=[]; d['items']=[]; d['seq']=1
+    ev=d['room'].get('event_date')
     if ev:
-        try:
-            ev_dt = datetime.datetime.fromisoformat(ev.replace("Z",""))
-            if ev_dt - datetime.datetime.utcnow() <= datetime.timedelta(days=2):
-                d["room"]["locked"] = True
-        except Exception:
-            pass
+        ev_dt=datetime.datetime.fromisoformat(ev.replace('Z',''))
+        if ev_dt-datetime.datetime.utcnow()<=datetime.timedelta(days=2): d['room']['locked']=True
     return d
-
 def create_app():
-    app = Flask(__name__, template_folder='templates', static_folder='static')
-    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret')
-    app.config['MAX_USERS'] = int(os.getenv('MAX_USERS', '50'))
+    app=Flask(__name__,template_folder='templates',static_folder='static')
+    app.config['SECRET_KEY']=os.getenv('SECRET_KEY','dev')
+    app.config['MAX_USERS']=int(os.getenv('MAX_USERS','50'))
     return app
-
-app = create_app()
-async_mode = 'threading' if os.name == 'nt' else 'eventlet'
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode=async_mode)
-
-def state_payload():
-    with _lock:
-        d = cleanup_if_expired(read_data())
-        write_data(d)
-        online = sorted(set(presence.values()))
-        return {"room": d["room"], "users": d["users"], "online": online,
-                "items": d["items"], "categories": d["categories"], "units": d["units"],
-                "max_users": app.config['MAX_USERS']}
-
-def broadcast_state():
-    socketio.emit("state", state_payload())
-
+app=create_app()
+socketio=SocketIO(app,cors_allowed_origins='*',async_mode=('threading' if os.name=='nt' else 'eventlet'))
+def state():
+    d=ensure_rules(read())
+    return {'room':d['room'],'users':d['users'],'online':sorted(set(presence.values())),'items':d['items'],
+            'categories':d['categories'],'units':d['units'],
+            'category_options':d.get('category_options',{}),'category_icons':d.get('category_icons',{}),
+            'option_en_map':d.get('option_en_map',{}),'max_users':app.config['MAX_USERS']}
+def broadcast(): socketio.emit('state',state())
 @app.get('/')
-def home():
-    return render_template('index.html')
-
+def home(): return render_template('index.html')
 @app.get('/manifest.webmanifest')
-def manifest():
-    return send_from_directory('static', 'manifest.webmanifest', mimetype='application/manifest+json')
-
+def mani(): return send_from_directory('static','manifest.webmanifest',mimetype='application/manifest+json')
 @app.get('/sw.js')
-def service_worker():
-    return send_from_directory('static', 'sw.js', mimetype='application/javascript')
-
-# ---- Room ----
-@app.get('/api/room')
-def api_room():
-    return jsonify(state_payload()["room"])
-
-@app.post('/api/room')
-def api_room_set():
-    body = request.get_json(silent=True) or {}
-    date_iso = (body.get("event_date") or "").strip()
-    with _lock:
-        d = read_data()
-        d = cleanup_if_expired(d)
-        if d["room"].get("locked"):
-            return jsonify(error="locked"), 403
-        # set or change event date
-        try:
-            dt = datetime.datetime.fromisoformat(date_iso.replace("Z",""))
-        except Exception:
-            return jsonify(error="bad_date"), 400
-        d["room"]["event_date"] = dt.isoformat()+"Z"
-        # if less than 2 days remain, lock immediately
-        if dt - datetime.datetime.utcnow() <= datetime.timedelta(days=2):
-            d["room"]["locked"] = True
-        write_data(d)
-    broadcast_state()
-    return jsonify(ok=True)
-
-# ---- Users ----
-@app.get('/api/users')
-def api_users():
-    with _lock:
-        d = read_data()
-    return jsonify(users=d["users"], max=app.config['MAX_USERS'], online=list(sorted(set(presence.values()))))
-
+def sw(): return send_from_directory('static','sw.js',mimetype='application/javascript')
+@app.get('/api/all')
+def all_api(): return jsonify(state())
 @app.post('/api/users')
-def api_add_user():
-    body = request.get_json(silent=True) or {}
-    name = (body.get("name") or "").strip()
-    if not name: return jsonify(error="name_required"), 400
+def add_user():
+    b=request.get_json(silent=True) or {}; name=(b.get('name') or '').strip()
+    if not name: return jsonify(error='name_required'),400
     with _lock:
-        d = read_data()
-        users = set(d["users"])
-        if name not in users:
-            if len(users) >= app.config['MAX_USERS']:
-                return jsonify(error="room_full"), 403
-            users.add(name)
-            d["users"] = sorted(users)
-            write_data(d)
-    broadcast_state()
-    return jsonify(ok=True)
-
-# ---- Items ----
-@app.get('/api/items')
-def api_items():
-    with _lock:
-        d = read_data()
-        d = cleanup_if_expired(d); write_data(d)
-    return jsonify(items=d["items"])
-
-@app.get('/api/categories')
-def api_categories():
-    with _lock:
-        d = read_data()
-    return jsonify(categories=d.get("categories", []), units=d.get("units", []))
-
+        d=read(); s=set(d['users'])
+        if name not in s:
+            if len(s)>=app.config['MAX_USERS']: return jsonify(error='room_full'),403
+            s.add(name); d['users']=sorted(s); write(d)
+    broadcast(); return jsonify(ok=True)
 @app.post('/api/items')
-def api_add_item():
-    body = request.get_json(silent=True) or {}
-    title = (body.get("title") or "").strip()
-    category = (body.get("category") or "Diğer").strip()
-    unit = (body.get("unit") or "kg").strip()
-    who = (body.get("who") or "").strip()
-    try: amount = float(body.get("amount", 0) or 0)
-    except Exception: return jsonify(error="bad_amount"), 400
-    if not title: return jsonify(error="title_required"), 400
+def add_item():
+    b=request.get_json(silent=True) or {}
+    title=(b.get('title') or '').strip(); category=(b.get('category') or 'Diğer').strip()
+    unit=(b.get('unit') or 'adet').strip(); who=(b.get('who') or '').strip()
+    try: amount=float(b.get('amount',0) or 0)
+    except: return jsonify(error='bad_amount'),400
+    if not title: return jsonify(error='title_required'),400
     with _lock:
-        d = read_data()
-        iid = d["seq"]; d["seq"] += 1
-        item = {"id": iid, "title": title, "category": category, "amount": amount, "unit": unit, "who": who, "status": "needed"}
-        d["items"].append(item); write_data(d)
-    broadcast_state()
-    return jsonify(item), 201
-
+        d=read(); iid=d['seq']; d['seq']+=1
+        d['items'].append({'id':iid,'title':title,'category':category,'amount':amount,'unit':unit,'who':who,'status':'needed'}); write(d)
+    broadcast(); return jsonify(ok=True,id=iid)
 @app.patch('/api/items/<int:iid>')
-def api_patch_item(iid: int):
-    body = request.get_json(silent=True) or {}
-    allowed = {"needed","claimed","brought"}
-    patch = {}
-    if "title" in body: patch["title"] = (body["title"] or "").strip()
-    if "category" in body: patch["category"] = (body["category"] or "").strip()
-    if "unit" in body: patch["unit"] = (body["unit"] or "").strip()
-    if "who" in body: patch["who"] = (body["who"] or "").strip()
-    if "amount" in body:
-        try: patch["amount"] = float(body["amount"])
-        except Exception: return jsonify(error="bad_amount"), 400
-    if "status" in body:
-        st = (body["status"] or "").strip()
-        if st not in allowed: return jsonify(error="bad_status", allowed=list(allowed)), 400
-        patch["status"] = st
+def patch_item(iid):
+    b=request.get_json(silent=True) or {}
     with _lock:
-        d = read_data()
-        found = None
-        for it in d["items"]:
-            if it["id"] == iid:
-                it.update({k:v for k,v in patch.items() if v is not None})
-                found = it; break
-        if not found: return jsonify(error="not_found"), 404
-        write_data(d)
-    broadcast_state()
-    return jsonify(found)
-
+        d=read(); f=None
+        for it in d['items']:
+            if it['id']==iid: it.update({k:v for k,v in b.items() if k in {'title','category','unit','who','status','amount'}}); f=it; break
+        if not f: return jsonify(error='not_found'),404
+        write(d)
+    broadcast(); return jsonify(f)
 @app.delete('/api/items/<int:iid>')
-def api_delete_item(iid: int):
+def del_item(iid):
     with _lock:
-        d = read_data()
-        n = len(d["items"])
-        d["items"] = [x for x in d["items"] if x["id"] != iid]
-        if len(d["items"]) == n:
-            return jsonify(error="not_found"), 404
-        write_data(d)
-    broadcast_state()
-    return ("", 204)
-
-# ---- Socket presence ----
-@socketio.on('connect')
-def on_connect():
-    emit("hello", {"msg":"connected"})
-
+        d=read(); n=len(d['items']); d['items']=[x for x in d['items'] if x['id']!=iid]
+        if len(d['items'])==n: return jsonify(error='not_found'),404
+        write(d)
+    broadcast(); return ('',204)
+@app.post('/api/date')
+def set_date():
+    b=request.get_json(silent=True) or {}
+    date_txt=(b.get('event_date') or '').strip(); who=(b.get('who') or '').strip()
+    try:
+        dd,mm,yy_time = date_txt.split('/'); yy, timepart = yy_time.split(' ',1)
+        hh,mins = timepart.split(':'); dt = datetime.datetime(int(yy),int(mm),int(dd),int(hh),int(mins))
+    except Exception:
+        return jsonify(error='bad_date_format'),400
+    with _lock:
+        d=read(); d['room']['event_date']=dt.isoformat()+'Z'; d['room']['locked']=False; write(d)
+    socketio.emit('notify',{'type':'date_changed','by':who or 'Anon','date':d['room']['event_date']}); broadcast(); return jsonify(ok=True)
 @socketio.on('join')
-def on_join(data):
-    name = (data.get("name") or "").strip()
-    presence[request.sid] = name or ""
-    broadcast_state()
-
+def on_join(data): presence[_rq.sid]=(data.get('name') or '').strip(); broadcast()
 @socketio.on('disconnect')
-def on_disconnect():
-    try: presence.pop(request.sid, None)
-    except Exception: pass
-    broadcast_state()
-
-if __name__ == "__main__":
-    socketio.run(app, host="127.0.0.1", port=8000)
+def on_disc(): presence.pop(_rq.sid,None); broadcast()
+if __name__=='__main__':
+    socketio.run(app,host='127.0.0.1',port=8000)
