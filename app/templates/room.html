@@ -1,60 +1,193 @@
-<!doctype html>
-<html lang="{{ 'tr' if lang=='tr' else 'en' }}">
-<head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>{{ 'Piknik Vakti' if lang=='tr' else 'Picnic Time' }} — {{ code }}</title>
-<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-<script>
-window.__ROOM__ = { code:"{{ code }}", lang:"{{ lang }}", username:"{{ username }}", date:"{{ date }}" };
-</script>
-</head>
-<body>
-  <div class="container">
-    <header class="topbar">
-      <a class="pill" href="/?lang={{ lang }}">← {{ 'Geri' if lang=='tr' else 'Back' }}</a>
-      <h1>{{ 'Piknik Vakti' if lang=='tr' else 'Picnic Time' }} — {{ code }}</h1>
-      <div class="lang">
-        <a class="pill" href="?lang=tr&username={{ username }}">🇹🇷 TR</a>
-        <a class="pill" href="?lang=en&username={{ username }}">🇬🇧 EN</a>
-      </div>
-    </header>
-
-    <section class="card">
-      <div class="meta">
-        <div>📅 {{ date or '—' }}</div>
-        <div>👤 {{ 'Kullanıcı:' if lang=='tr' else 'User:' }} <b>{{ username }}</b></div>
-      </div>
-
-      <h2>⚡ {{ 'Hızlı ekle' if lang=='tr' else 'Quick add' }}</h2>
-      <div class="chips" id="chips"></div>
-
-      <div class="form">
-        <input id="itemName" class="text" placeholder="{{ 'Ürün adı (örn. Kaşar)' if lang=='tr' else 'Item name (e.g. Cheese)' }}" />
-        <select id="unit" class="text">
-          <option value="kg">kg</option>
-          <option value="adet">{{ 'adet' if lang=='tr' else 'pcs' }}</option>
-          <option value="lt">lt</option>
-        </select>
-        <input id="amount" class="text" type="number" min="0.5" step="0.5" value="1"/>
-        <button id="addBtn" class="btn success">{{ 'Ekle' if lang=='tr' else 'Add' }}</button>
-      </div>
-
-      <div class="quick">
-        <button class="pill quickbtn" data-amt="0.5">0.5 kg</button>
-        <button class="pill quickbtn" data-amt="1">1 kg</button>
-        <button class="pill quickbtn" data-amt="2">2 kg</button>
-        <button class="pill quickbtn" data-amt="3">3 kg</button>
-        <button class="pill quickbtn" data-amt="4">4 kg</button>
-        <button class="pill quickbtn" data-amt="5">5 kg</button>
-      </div>
-    </section>
-
-    <section class="card">
-      <h2>🧾 {{ 'Ürünler' if lang=='tr' else 'Items' }}</h2>
-      <div id="items"></div>
-    </section>
+<!doctype html><html lang="{{ lang }}"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Piknik Vakti — {{ code }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head><body>
+<div class="container">
+  <div class="header">
+    <a href="/" class="badge">← Geri</a>
+    <div class="lang">
+      <a href="?username={{ username }}&lang=tr{{ '&view=1' if view else '' }}" class="{{ 'active' if lang=='tr' else '' }}" data-lang="tr">🇹🇷 TR</a>
+      <a href="?username={{ username }}&lang=en{{ '&view=1' if view else '' }}" class="{{ 'active' if lang=='en' else '' }}" data-lang="en">🇬🇧 EN</a>
+    </div>
   </div>
-<script src="{{ url_for('static', filename='js/app.js') }}"></script>
-</body>
-</html>
+
+  <h1>📅 Piknik Vakti — {{ code if not view else (code[:2] + '**') }}</h1>
+  <div class="small">
+    <span id="date">—</span> ·
+    <b id="user">{{ username }}</b>
+    {% if view %} · <b>🔒 Sadece görüntülüyorsunuz</b>{% endif %}
+  </div>
+
+  <div class="card">
+    <h2>⚡ Hızlı ekle</h2>
+    <div id="cats" class="chips"></div>
+    <hr class="chips-sep">
+    <div id="subchips" class="chips"></div>
+
+    <div class="row" style="margin-top:10px">
+      <input id="itemName" placeholder="Ürün adı (örn. Kaşar)">
+      <select id="unit"><option value="kg">kg</option><option value="adet">adet</option><option value="lt">lt</option></select>
+      <input id="amount" value="1">
+      <button id="add" class="primary" {% if view %}disabled{% endif %}>Ekle</button>
+    </div>
+    <div id="quick" class="quick"></div>
+  </div>
+
+  <div class="card">
+    <h2>🧺 Ürünler</h2>
+    <div id="list" class="list"></div>
+  </div>
+</div>
+
+<script>
+const ROOM="{{ code }}"; const USER="{{ username }}"; const VIEW={{ 'true' if view else 'false' }};
+const ICONS={"elma":"🍎","armut":"🍐","üzüm":"🍇","karpuz":"🍉","portakal":"🍊","muz":"🍌","mandalina":"🍊","çilek":"🍓","şeftali":"🍑","kavun":"🍈",
+"domates":"🍅","soğan":"🧅","biber":"🫑","patates":"🥔","mısır (koçan)":"🌽","marul":"🥬","roka":"🥬","mantar":"🍄","sarımsak":"🧄","patlıcan":"🍆",
+"köfte":"🥩","tavuk":"🍗","sucuk":"🌭","mangal":"🍖","ızgara teli":"🧰","mangal kömürü":"🪨","şiş":"🍢",
+"ekmek":"🥖","lavaş":"🫓","simit":"🥯","tortilla":"🫓",
+"kaşar":"🧀","beyaz peynir":"🧀","sucuk dilim":"🥪","salam":"🥪","sosis":"🌭",
+"mevsim salata":"🥗","gavurdağı":"🥗","humus":"🫘","haydari":"🥣","acılı ezme":"🌶️","mayonez":"🥫","ketçap":"🥫","hardal":"🥫","maydanoz":"🌿",
+"su":"💧","kola":"🥤","ayran":"🥛","maden suyu":"🫗","gazoz":"🥤",
+"tuz":"🧂","karabiber":"🧂","pul biber":"🌶️","sumak":"🧂","kimyon":"🧂",
+"zeytin":"🫒","reçel":"🍯","bal":"🍯","tahin":"🥫","pekmez":"🥫",
+"islak mendil":"🧻","peçete":"🧻","bulaşık deterjanı":"🧴","sıvı sabun":"🧴",
+"tabak":"🍽️","bardak":"🥤","çatal":"🍴","bıçak":"🔪","kaşık":"🥄",
+"buz":"🧊","soğutucu":"🧊","buz aküsü":"🧊",
+"kesme tahtası":"🔪","maşa":"🛠️","çöp poşeti":"🗑️",
+"oyun":"🎲","müzik hoparlör":"🔊","piknik örtüsü":"🧺"};
+
+function iconFor(n){return ICONS[(n||'').toLowerCase()]||"🧺";}
+
+const CATS=[
+  {k:'meyve',t:'🍓 Meyve',items:['Elma','Armut','Üzüm','Karpuz','Portakal','Muz','Mandalina','Çilek','Şeftali','Kavun']},
+  {k:'sebze',t:'🥒 Sebze',items:['Domates','Soğan','Biber','Patates','Mısır (koçan)','Marul','Roka','Mantar','Sarımsak','Patlıcan']},
+  {k:'et',t:'🥩 Et/Mangal',items:['Köfte','Tavuk','Sucuk','Mangal','Izgara Teli','Mangal Kömürü','Şiş']},
+  {k:'ekmek',t:'🍞 Ekmek/Unlu',items:['Ekmek','Lavaş','Simit','Tortilla']},
+  {k:'peynir',t:'🧀 Peynir/Şarküteri',items:['Kaşar','Beyaz Peynir','Sucuk Dilim','Salam','Sosis']},
+  {k:'salata',t:'🥗 Salata/Meze',items:['Mevsim Salata','Gavurdağı','Humus','Haydari','Acılı Ezme','Mayonez','Ketçap','Hardal','Maydanoz']},
+  {k:'icecek',t:'🥤 İçecek',items:['Su','Kola','Ayran','Maden Suyu','Gazoz']},
+  {k:'sos',t:'🧂 Sos/Condiment',items:['Tuz','Karabiber','Pul Biber','Sumak','Kimyon']},
+  {k:'kahv',t:'🍯 Kahvaltılık',items:['Zeytin','Reçel','Bal','Tahin','Pekmez']},
+  {k:'temiz',t:'🧴 Temizlik/Hijyen',items:['Islak Mendil','Peçete','Bulaşık Deterjanı','Sıvı Sabun']},
+  {k:'tek',t:'🍽️ Tek Kullanımlık',items:['Tabak','Bardak','Çatal','Bıçak','Kaşık']},
+  {k:'sogut',t:'🧊 Soğutma/Buz',items:['Buz','Soğutucu','Buz Aküsü']},
+  {k:'alet',t:'🧰 Ekipman/Alet',items:['Kesme Tahtası','Bıçak','Maşa','Çöp Poşeti']},
+  {k:'diger',t:'🧩 Diğer',items:['Oyun','Müzik Hoparlör','Piknik Örtüsü']},
+];
+
+const catsDiv=document.getElementById('cats'),subsDiv=document.getElementById('subchips'),
+itemName=document.getElementById('itemName'),unitSel=document.getElementById('unit'),
+amountEl=document.getElementById('amount'),quickDiv=document.getElementById('quick'),listDiv=document.getElementById('list');
+let currentCat=null,OWNER='';
+
+function unitFor(i){
+  const s=i.toLowerCase();
+  const L=['su','ayran','kola','gazoz','maden'];
+  const A=['ekmek','lavaş','simit','ketçap','mayonez','hardal','tabak','bardak','çatal','bıçak','kaşık','ızgara','mangal','kömürü','şiş','peçete','ıslak','buz','aküsü','soğutucu','kesme','maşa','çöp','humus','haydari'];
+  if(L.some(k=>s.includes(k)))return 'lt';
+  if(A.some(k=>s.includes(k)))return 'adet';
+  return 'kg';
+}
+function quickFor(u){if(u==='kg')return[0.5,1,2,3,4,5];if(u==='lt')return[0.5,1,2,5,10];return[0.5,1,2,3,5];}
+
+function renderCats(){
+  catsDiv.innerHTML='';
+  CATS.forEach(c=>{
+    const el=document.createElement('div'); el.className='chip'; el.textContent=c.t;
+    el.onclick=()=>{currentCat=c; renderSubs();}; catsDiv.appendChild(el);
+  });
+}
+function renderSubs(existingNames=[]){
+  subsDiv.innerHTML='';
+  if(!currentCat) return;
+  const exist=new Set(existingNames.map(s=>s.toLowerCase()));
+  currentCat.items.forEach(name=>{
+    const el=document.createElement('div');
+    el.className='chip'+(exist.has(name.toLowerCase())?' disabled':'');
+    el.textContent=`${iconFor(name)} ${name}`;
+    el.onclick=()=>{itemName.value=name; const u=unitFor(name); unitSel.value=u; renderQuick(u);};
+    subsDiv.appendChild(el);
+  });
+}
+function renderQuick(u){
+  quickDiv.innerHTML='';
+  quickFor(u).forEach(n=>{
+    const el=document.createElement('div'); el.className='chip'; el.textContent=`${n} ${u}`;
+    el.onclick=()=>{amountEl.value=n; if(!VIEW) addItem();}; quickDiv.appendChild(el);
+  });
+}
+
+async function getRoom(){
+  const r=await fetch(`/api/room/${ROOM}`); return await r.json();
+}
+async function addItemAPI(b){
+  const r=await fetch(`/api/room/${ROOM}/items`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
+  if(!r.ok){ alert(await r.text()); }
+}
+async function patchItem(id,s){
+  await fetch(`/api/room/${ROOM}/items/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:USER,state:s})});
+}
+async function deleteItem(id){
+  await fetch(`/api/room/${ROOM}/items/${id}?user=${encodeURIComponent(USER)}`,{method:'DELETE'});
+}
+function myCanEdit(owner,u){ return !VIEW && (USER===u || USER===owner); }
+
+function renderList(items){
+  listDiv.innerHTML='';
+  const names = items.map(i=>i.name);
+  renderSubs(names);
+  items.forEach(it=>{
+    const row=document.createElement('div');
+    row.className='item '+(it.state==='needed'?'needed':(it.state==='brought'?'brought':''));
+    const left=document.createElement('div'); left.className='item-left';
+    const title=document.createElement('div'); title.className='item-title';
+    title.textContent=`${iconFor(it.name)} ${it.name} — ${it.amount} ${it.unit}`;
+    const meta=document.createElement('div'); meta.className='item-meta';
+    meta.textContent=`${it.cat} · @${it.user}`;
+    left.append(title,meta);
+
+    const act=document.createElement('div'); act.className='actions';
+    const bN=document.createElement('button'); bN.className='btn state needed'+(it.state==='needed'?' active':''); bN.textContent='Eksik';
+    const bC=document.createElement('button'); bC.className='btn state claimed'+(it.state==='claimed'?' active':''); bC.textContent='Ayrılan';
+    const bB=document.createElement('button'); bB.className='btn state brought'+(it.state==='brought'?' active':''); bB.textContent='Getirildi';
+    const del=document.createElement('button'); del.className='btn'; del.textContent='Sil';
+
+    if(myCanEdit(OWNER,it.user)){
+      bN.onclick=()=>patchItem(it.id,'needed');
+      bC.onclick=()=>patchItem(it.id,'claimed');
+      bB.onclick=()=>patchItem(it.id,'brought');
+      del.onclick=()=>deleteItem(it.id);
+    }else{
+      [bN,bC,bB,del].forEach(b=>{b.disabled=true; b.style.opacity=.5;});
+    }
+    act.append(bN,bC,bB,del);
+    row.append(left,act);
+    listDiv.appendChild(row);
+  });
+}
+
+async function addItem(){
+  let name=(itemName.value||'').trim();
+  if(!name){ alert("Ürün adı gerekli"); return; }
+  const unit=unitSel.value;
+  let amount=parseFloat(amountEl.value||'1'); if(isNaN(amount)||amount<=0) amount=1;
+  const cat=currentCat?currentCat.t:'Diğer';
+  await addItemAPI({name,unit,amount,cat,user:USER});
+  itemName.value='';
+}
+
+async function loop(){
+  try{
+    const data=await getRoom();
+    OWNER = data.owner || OWNER;
+    document.getElementById('date').textContent = data.date || '—';
+    renderList(data.items || []);
+  }catch(e){}
+  setTimeout(loop, 2000);
+}
+
+renderCats(); renderQuick('kg'); loop();
+itemName.addEventListener('input',e=>{ const u=unitFor(e.target.value||''); unitSel.value=u; renderQuick(u); });
+</script>
+</body></html>
