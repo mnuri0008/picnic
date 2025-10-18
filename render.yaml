@@ -1,15 +1,8 @@
-
 services:
   - type: web
-    name: nuri-piknik-v41
+    name: piknik-vakti
     env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn -w 1 -b 0.0.0.0:$PORT app.server:app"
     plan: free
-    buildCommand: pip install -r requirements.txt && pip install gunicorn eventlet
-    startCommand: gunicorn -k eventlet -w 1 app.server:app
-    envVars:
-      - key: FLASK_ENV
-        value: production
-      - key: MAX_USERS
-        value: "50"
-      - key: SECRET_KEY
-        generateValue: true
+    autoDeploy: true

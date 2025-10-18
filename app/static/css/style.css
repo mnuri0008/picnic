@@ -1,0 +1,34 @@
+:root { --bg:#0f172a; --card:#111827; --text:#e5e7eb; --muted:#9ca3af; --primary:#60a5fa; --success:#22c55e; --danger:#ef4444; --chip:#1f2937; }
+*{box-sizing:border-box} body{margin:0;font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;color:var(--text);background:var(--bg)}
+.container{max-width:980px;margin:0 auto;padding:16px}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0}
+h1,h2,h3{margin:8px 0 12px}
+.card{background:var(--card);border-radius:14px;padding:16px;margin:12px 0;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:999px;background:#0b1220;color:#cbd5e1;text-decoration:none;border:1px solid #1f2937}
+.btn{border:0;border-radius:12px;padding:10px 16px;cursor:pointer}
+.btn.primary{background:var(--primary);color:#031126}
+.btn.success{background:var(--success);color:#031126}
+.btn.ghost{background:#0b1220;border:1px solid #1f2937;color:#cbd5e1}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px}
+.grid2 label{display:flex;flex-direction:column;gap:6px}
+.grid2 input{padding:10px;border-radius:12px;border:1px solid #1f2937;background:#0b1220;color:#e5e7eb}
+.helper{margin-top:12px;color:var(--muted)}
+.meta{display:flex;gap:16px;margin-bottom:12px;color:#cbd5e1}
+.form{display:grid;grid-template-columns:2fr 120px 120px 120px;gap:8px;margin-top:8px}
+.text{padding:10px;border-radius:10px;border:1px solid #1f2937;background:#0b1220;color:#e5e7eb}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{background:var(--chip);padding:8px 12px;border-radius:999px;border:1px solid #263043;display:inline-flex;align-items:center;gap:8px;cursor:pointer}
+.chip:hover{border-color:#334155}
+.quick{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.quickbtn{background:#0b1220;border:1px solid #1f2937;color:#e5e7eb}
+.item{display:flex;align-items:center;justify-content:space-between;background:#0b1220;border:1px solid #1f2937;border-radius:12px;padding:10px 12px;margin:8px 0}
+.tag{padding:6px 10px;border-radius:999px;border:1px solid #1f2937}
+.statbtn{border:0;border-radius:999px;padding:8px 12px;margin-left:6px}
+.statbtn.need{background:#ef4444;color:#fff}
+.statbtn.claim{background:#f59e0b;color:#031126}
+.statbtn.brought{background:#22c55e;color:#031126}
+.lang a{margin-left:6px}
+@media (max-width:720px){
+  .grid2{grid-template-columns:1fr}
+  .form{grid-template-columns:1fr 1fr 1fr 1fr}
+}

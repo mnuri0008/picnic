@@ -1,44 +1,59 @@
+<!doctype html>
+<html lang="{{ 'tr' if lang=='tr' else 'en' }}">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>{{ 'Piknik Vakti' if lang=='tr' else 'Picnic Time' }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <div class="container">
+    <header class="topbar">
+      <h1>🎒 {{ 'Piknik Vakti' if lang=='tr' else 'Picnic Time' }}</h1>
+      <div class="lang">
+        <a class="pill" href="/?lang=tr">🇹🇷 TR</a>
+        <a class="pill" href="/?lang=en">🇬🇧 EN</a>
+      </div>
+    </header>
 
-<!doctype html><html lang="tr"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0f172a">
-<link rel="stylesheet" href="/static/app.css">
-<script src="https://cdn.socket.io/4.7.5/socket.io.min.js" crossorigin="anonymous"></script>
-</head><body>
-<div class="phone-frame">
-<header class="topbar"><div class="brand">Piknik Vakti</div>
-  <div class="top-right">
-    <span id="presence" class="users"></span>
-    <div class="lang-toggle" role="group" aria-label="Language">
-      <button type="button" class="langbtn" data-lang="tr" aria-label="Türkçe"><span class="flag">🇹🇷</span><span>TR</span></button>
-      <button type="button" class="langbtn" data-lang="en" aria-label="English"><span class="flag">🇬🇧</span><span>EN</span></button>
-    </div>
+    <section class="card">
+      <h2>{{ 'Oda oluştur veya katıl' if lang=='tr' else 'Create or Join a Room' }}</h2>
+
+      <form class="grid2" action="/create_room" method="post">
+        <input type="hidden" name="lang" value="{{ lang }}"/>
+        <label>
+          <span>📅 {{ 'Piknik tarihi' if lang=='tr' else 'Picnic time' }}</span>
+          <input type="datetime-local" name="picnic_date" required />
+        </label>
+        <label>
+          <span>👤 {{ 'İsmin' if lang=='tr' else 'Your name' }}</span>
+          <input type="text" name="username" placeholder="{{ 'örn. Ali' if lang=='tr' else 'e.g. Alex' }}" required />
+        </label>
+        <button class="btn success" type="submit">{{ 'Oda Oluştur' if lang=='tr' else 'Create Room' }}</button>
+      </form>
+
+      <form class="grid2" action="/join_room" method="post">
+        <input type="hidden" name="lang" value="{{ lang }}"/>
+        <label>
+          <span>🔑 {{ 'Oda kodu (katılmak için)' if lang=='tr' else 'Room code (to join)' }}</span>
+          <input type="text" name="join_code" inputmode="numeric" minlength="4" maxlength="4" placeholder="4" required />
+        </label>
+        <label>
+          <span>👤 {{ 'İsmin' if lang=='tr' else 'Your name' }}</span>
+          <input type="text" name="username_join" placeholder="{{ 'örn. Ali' if lang=='tr' else 'e.g. Alex' }}" required />
+        </label>
+        <button class="btn primary" type="submit">{{ 'Koda Göre Katıl' if lang=='tr' else 'Join with Code' }}</button>
+      </form>
+
+      <div class="helper">
+        <p>🔒 {{ 'Cihazına özel kimlik saklanır; tekrar yazmana gerek yok.' if lang=='tr' else 'Device-specific ID is saved; no need to re-type your name.' }}</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3>📘 {{ 'Kullanım Kılavuzu' if lang=='tr' else 'User Guide' }}</h3>
+      <a class="btn ghost" href="{{ url_for('static', filename='guide/klavuz.odt') }}" download>{{ 'ODF indir' if lang=='tr' else 'Download ODF' }}</a>
+    </section>
   </div>
-</header>
-<main class="content">
-<section class="card form">
-  <div class="row"><input id="nick" placeholder="Takma ad (örn: Ali)" data-i18n-ph="nick_ph"><button id="joinBtn" class="btn" data-i18n="join">Katıl</button></div>
-  <div class="row"><select id="category"></select></div>
-  <div id="quickGrid" class="qgrid"></div>
-  <div class="row"><input id="title" placeholder="Ürün adı" data-i18n-ph="item_ph"></div>
-  <div class="row"><input id="amount" type="number" min="0" step="0.01" placeholder="Miktar" data-i18n-ph="amount_ph" style="max-width:120px"><select id="unit"></select><button id="addBtn" class="btn" data-i18n="add">Ekle</button></div>
-  <div id="qtyPresets" class="qty"></div>
-  <div class="row"><label class="lbl" data-i18n="event_date">Piknik tarihi</label><input id="eventDateText" type="text" class="dt" placeholder="gg/aa/yyyy ss:dd"></div>
-  <div class="row"><button id="saveDate" class="btn btn-wide" data-i18n="save">Kaydet</button></div>
-  <div class="row"><span class="muted" data-i18n="date_note">Değişiklik tüm kullanıcılara duyurulur.</span></div>
-</section>
-<section class="card">
-  <div class="filters">
-    <button class="chip active" data-f="all" data-i18n="all">Tümü</button>
-    <button class="chip" data-f="needed" data-i18n="needed">Eksik</button>
-    <button class="chip" data-f="claimed" data-i18n="claimed">Ayrılan</button>
-    <button class="chip" data-f="brought" data-i18n="brought">Getirildi</button>
-  </div>
-  <div id="initials" class="initials"></div>
-  <ul id="list" class="list"></ul>
-</section>
-</main>
-<div id="toast" class="toast" hidden></div>
-</div>
-<script src="/static/app.js"></script>
-</body></html>
+</body>
+</html>
