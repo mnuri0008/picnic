@@ -4,6 +4,24 @@ import threading, itertools
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 
+@app.route("/static/icons/icon-192.png")
+def icon_192():
+    return send_from_directory("static/icons", "icon-192.png", mimetype="image/png")
+
+@app.route("/static/icons/icon-512.png")
+def icon_512():
+    return send_from_directory("static/icons", "icon-512.png", mimetype="image/png")
+
+# Eski isimleri de 200 döndür (PWABuilder ya da başka yer yanlış URL kullanırsa)
+@app.route("/static/icons/picnic-icon-192.png")
+def picnic_icon_192():
+    return send_from_directory("static/icons", "icon-192.png", mimetype="image/png")
+
+@app.route("/static/icons/picnic-icon-512.png")
+def picnic_icon_512():
+    return send_from_directory("static/icons", "icon-512.png", mimetype="image/png")
+
+
 # In-memory “DB”
 ROOMS = {}  # code -> {"owner": str, "date": str(ISO minutes), "items":[{...}]}
 IDGEN = itertools.count(1)
