@@ -1,94 +1,87 @@
-name: Build Android AAB (Bubblewrap)
+name: Build AAB (Bubblewrap)
 
 on:
   workflow_dispatch:
+    inputs:
+      manifest_url:
+        description: "Web manifest URL"
+        required: false
+        default: "https://picnic-3.onrender.com/manifest.json"
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      CI: "true"
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      MANIFEST_URL: ${{ github.event.inputs.manifest_url || secrets.MANIFEST_URL || 'https://picnic-3.onrender.com/manifest.json' }}
 
     steps:
-      - name: Checkout repo
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: '20'
 
-      - name: Setup Java (JDK 17)
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
-          java-version: 17
+          distribution: 'temurin'
+          java-version: '17'
 
-      - name: Install Bubblewrap CLI
+      - name: Setup Android SDK (cmdline-tools)
+        uses: android-actions/setup-android@v3
+
+      - name: Install required SDK packages
+        run: |
+          sdkmanager --sdk_root="$ANDROID_SDK_ROOT" --licenses <<< "y" > /dev/null
+          sdkmanager --sdk_root="$ANDROID_SDK_ROOT" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Install Bubblewrap
         run: npm i -g @bubblewrap/cli
 
-      - name: Restore keystore from secret
-        shell: bash
-        env:
-          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+      - name: Configure Bubblewrap paths
         run: |
-          echo "$KEYSTORE_B64" | base64 -d > signing.keystore
-          ls -la
+          mkdir -p ~/.bubblewrap
+          cat > ~/.bubblewrap/config.json <<'EOF'
+          { "jdkPath": "/opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17/x64", "androidSdkPath": "/usr/local/lib/android/sdk" }
+          EOF
+          echo "Bubblewrap: $(npx bubblewrap --version)"
 
-      - name: Create twa-manifest.json
+      - name: Restore signing.keystore from secrets
         shell: bash
-        env:
-          WEB_MANIFEST_URL: ${{ secrets.WEB_MANIFEST_URL }}
         run: |
-          cat > twa-manifest.json << 'JSON'
-          {
-            "packageId": "com.onrender.picnic_3.twa",
-            "host": "picnic-3.onrender.com",
-            "name": "Picnic Vakti",
-            "launcherName": "Picnic",
-            "display": "standalone",
-            "themeColor": "#FF6600",
-            "navigationColor": "#FF6600",
-            "navigationColorDark": "#FF6600",
-            "navigationDividerColor": "#FF6600",
-            "navigationDividerColorDark": "#FF6600",
-            "backgroundColor": "#FFFFFF",
-            "startUrl": "/",
-            "enableNotifications": false,
-            "webManifestUrl": "WEB_MANIFEST_URL_REPLACE",
-            "iconUrl": "https://picnic-3.onrender.com/static/icons/icon-512.png",
-            "maskableIconUrl": "https://picnic-3.onrender.com/static/icons/icon-512.png",
-            "appVersionName": "1.0.${{ github.run_number }}",
-            "appVersionCode": ${{ github.run_number }},
-            "fallbackType": "customtabs",
-            "minSdkVersion": 19
-          }
-          JSON
-          sed -i "s|WEB_MANIFEST_URL_REPLACE|$WEB_MANIFEST_URL|g" twa-manifest.json
-          cat twa-manifest.json
+          test -n "${{ secrets.SIGNING_KEYSTORE_BASE64 }}" || { echo "Missing SIGNING_KEYSTORE_BASE64 secret"; exit 1; }
+          echo "${{ secrets.SIGNING_KEYSTORE_BASE64 }}" | base64 -d > signing.keystore
+          test -s signing.keystore || { echo "signing.keystore could not be created"; exit 1; }
+          echo "Keystore restored (size: $(stat -c%s signing.keystore) bytes)"
 
-      - name: Init TWA project
-        run: npx bubblewrap init --manifest=twa-manifest.json --directory .
+      - name: Bubblewrap init (from WEB manifest URL)
+        run: |
+          # Init her zaman WEB manifest URL ister. TWA manifest dosyası DEĞİL.
+          yes n | npx bubblewrap init \
+            --manifest="${{ env.MANIFEST_URL }}" \
+            --directory . \
+            --skipPwaValidation
 
-      - name: Build AAB
+      - name: Build signed .aab
         env:
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASS: ${{ secrets.KEY_PASS }}
-          STORE_PASS: ${{ secrets.STORE_PASS }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
         run: |
           npx bubblewrap build \
             --signingKey=signing.keystore \
-            --signingKeyAlias="$KEY_ALIAS" \
-            --signingKeyPassword="$KEY_PASS" \
-            --keyStorePassword="$STORE_PASS"
-
-      - name: Locate bundle
-        id: findbundle
-        run: |
-          BUNDLE=$(find . -type f -name "*.aab" | head -n1)
-          echo "bundle=$BUNDLE" >> $GITHUB_OUTPUT
-          echo "Found: $BUNDLE"
+            --signingKeyAlias="${SIGNING_KEY_ALIAS:-upload}" \
+            --keyStorePassword="${KEYSTORE_PASSWORD}" \
+            --signingKeyPassword="${SIGNING_KEY_PASSWORD}"
+          ls -al app/build/outputs/bundle/release || true
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
         with:
           name: picnic-aab
-          path: ${{ steps.findbundle.outputs.bundle }}
+          path: app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
