@@ -1,4 +1,3 @@
-cat > /content/picnic/twa-manifest.json <<'JSON'
 {
   "packageId": "com.onrender.picnic_3.twa",
   "host": "picnic-3.onrender.com",
@@ -24,7 +23,3 @@ cat > /content/picnic/twa-manifest.json <<'JSON'
   "fallbackType": "customtabs",
   "minSdkVersion": 19
 }
-JSON
-
-echo "=== TWA MANIFEST ==="
-cat /content/picnic/twa-manifest.json
