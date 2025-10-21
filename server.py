@@ -1,9 +1,11 @@
-from flask import Flask, render_template, request, jsonify, abort, send_from_directory
+from flask import Flask, render_template, request, jsonify, abort, send_from_directory, make_response
 from datetime import datetime, timedelta
 import threading, itertools
 
-app = Flask(__name__, static_folder='static', template_folder='templates')
+# static_url_path='/static' diyerek Flask'ın static mapping'i netleştirelim
+app = Flask(__name__, static_folder='static', static_url_path='/static', template_folder='templates')
 
+# ------- ICON ALIASES (PWABuilder'ın bekledikleri 200 dönsün) -------
 @app.route("/static/icons/icon-192.png")
 def icon_192():
     return send_from_directory("static/icons", "icon-192.png", mimetype="image/png")
@@ -12,7 +14,7 @@ def icon_192():
 def icon_512():
     return send_from_directory("static/icons", "icon-512.png", mimetype="image/png")
 
-# Eski isimleri de 200 döndür (PWABuilder ya da başka yer yanlış URL kullanırsa)
+# Eski adlar da 200 dönsün (bazı araçlar bu yolları çağırıyor)
 @app.route("/static/icons/picnic-icon-192.png")
 def picnic_icon_192():
     return send_from_directory("static/icons", "icon-192.png", mimetype="image/png")
@@ -22,6 +24,29 @@ def picnic_icon_512():
     return send_from_directory("static/icons", "icon-512.png", mimetype="image/png")
 
 
+# ------- PWA DOSYALARI (kökten servis) -------
+@app.route('/manifest.json')
+def manifest():
+    resp = make_response(send_from_directory(app.static_folder, 'manifest.json'))
+    # Bazı tarayıcılarda doğru tip önemli
+    resp.mimetype = 'application/manifest+json'
+    return resp
+
+@app.route('/service-worker.js')
+def service_worker():
+    # SW için no-cache header'ı verelim (update sorunsuz olsun)
+    resp = make_response(send_from_directory(app.static_folder, 'service-worker.js'))
+    resp.mimetype = 'text/javascript'
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    return resp
+
+# Digital Asset Links (TWA doğrulaması)
+@app.route("/.well-known/assetlinks.json")
+def assetlinks():
+    return send_from_directory("static/.well-known", "assetlinks.json", mimetype="application/json")
+
+
+# -------------------- APP LOGIC --------------------
 # In-memory “DB”
 ROOMS = {}  # code -> {"owner": str, "date": str(ISO minutes), "items":[{...}]}
 IDGEN = itertools.count(1)
@@ -47,16 +72,6 @@ def _as_dt(s: str):
         except Exception:
             return None
 
-# ---------- STATIC PWA ENDPOINTS (kökten servis) ----------
-@app.route('/manifest.json')
-def manifest():
-    return send_from_directory(app.static_folder, 'manifest.json',
-                               mimetype='application/manifest+json')
-
-@app.route('/service-worker.js')
-def service_worker():
-    return send_from_directory(app.static_folder, 'service-worker.js',
-                               mimetype='application/javascript')
 
 # ---------- SAYFALAR ----------
 @app.route("/")
@@ -93,6 +108,7 @@ def home():
 
     return render_template("index.html", rooms=rooms, lang=lang)
 
+
 @app.route("/room/<code>")
 def room(code):
     username = request.args.get("username", "guest")
@@ -100,6 +116,7 @@ def room(code):
     # “Gör” linkinden gelindiyse sadece görüntüleme modu
     view = request.args.get("view") == "1"
     return render_template("room.html", code=code, username=username, lang=lang, view=view)
+
 
 # ---------- API ----------
 @app.post("/api/room")
@@ -197,5 +214,7 @@ def api_del_item(code, item_id):
                 return "", 204
     abort(404)
 
+
 if __name__ == "__main__":
+    # Render/Heroku stilinde local run
     app.run(debug=True, host="0.0.0.0", port=8000)
