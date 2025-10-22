@@ -8,7 +8,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,7 +26,6 @@ jobs:
       - name: Install Bubblewrap CLI (pin)
         run: npm i -g @bubblewrap/cli@1.24.1
 
-      # Keystore'u GitHub Secrets'tan geri yükle
       - name: Restore signing.keystore from secrets
         shell: bash
         run: |
@@ -37,31 +35,25 @@ jobs:
           test -s signing.keystore || { echo "signing.keystore could not be created"; exit 1; }
           echo "✅ Keystore restored (size: $(stat -c%s signing.keystore) bytes)"
 
-      # WEB manifest'ten (repo içindeki) TWA projesini interaktif sormadan başlat
       - name: Init TWA from local WEB manifest (no prompts)
         shell: bash
         run: |
           set -euo pipefail
+          test -f static/manifest.json || { echo "❌ static/manifest.json yok"; ls -la static || true; exit 1; }
 
-          echo "🧩 Checking WEB manifest file..."
-          test -f static/manifest.json || { echo "❌ static/manifest.json bulunamadı!"; ls -la static || true; exit 1; }
-
-          echo "✅ WEB manifest bulundu, başlatılıyor..."
+          # Bubblewrap config
           mkdir -p ~/.bubblewrap
           cat > ~/.bubblewrap/config.json <<JSON
-          {
-            "jdkPath": "${{ env.JAVA_HOME }}",
-            "androidSdkPath": "/usr/local/lib/android/sdk"
-          }
+          { "jdkPath": "${{ env.JAVA_HOME }}", "androidSdkPath": "/usr/local/lib/android/sdk" }
           JSON
 
-          echo "🚀 Running Bubblewrap init (non-interactive)..."
+          # DİKKAT: host artık tam URL (https ile)
           npx bubblewrap init \
             --manifest=static/manifest.json \
             --directory . \
             --skipPwaValidation \
             --no-input \
-            --host=picnic-3.onrender.com \
+            --host=https://picnic-3.onrender.com \
             --applicationId=com.onrender.picnic_3.twa \
             --name="Picnic Vakti" \
             --launcherName="Picnic" \
@@ -71,9 +63,6 @@ jobs:
             --iconUrl="https://picnic-3.onrender.com/static/icons/icon-512.png" \
             --maskableIconUrl="https://picnic-3.onrender.com/static/icons/icon-512.png"
 
-          echo "✅ TWA initialized successfully."
-
-      # İmzalı .aab build et
       - name: Build signed AAB
         shell: bash
         env:
@@ -88,7 +77,6 @@ jobs:
             --signingKeyPassword="${KEY_PASSWORD:-picnic123}" \
             --keyStorePassword="${KEYSTORE_PASSWORD:-picnic123}"
 
-      # Çıkan .aab dosyasını artefakt olarak yükle
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
         with:
