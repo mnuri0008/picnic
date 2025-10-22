@@ -5,13 +5,9 @@ on:
   push:
     branches: [ main ]
 
-env:
-  MANIFEST_URL: https://picnic-3.onrender.com/manifest.json
-
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,18 +35,11 @@ jobs:
           test -s signing.keystore || { echo "signing.keystore could not be created"; exit 1; }
           echo "Keystore restored (size: $(stat -c%s signing.keystore) bytes)"
 
-      - name: Init TWA from WEB manifest (no prompts)
+      - name: Init TWA from local manifest (no prompts)
         shell: bash
         run: |
           set -euo pipefail
-
-          echo "Checking manifest URL: ${{ env.MANIFEST_URL }}"
-          code=$(curl -sSIL -o /dev/null -w '%{http_code}' "${{ env.MANIFEST_URL }}")
-          test "$code" = "200" || { echo "Manifest not reachable (HTTP $code)"; exit 1; }
-
-          # JSON sanity (ilk karakter '{' olsun)
-          headchar=$(curl -fsSL "${{ env.MANIFEST_URL }}" | tr -d '\r\n' | sed 's/^[ \t]*//' | cut -c1)
-          test "$headchar" = "{" || { echo "Manifest is not JSON (did server return HTML/error page?)"; exit 1; }
+          test -f static/manifest.json || { echo "static/manifest.json yok"; exit 1; }
 
           # Bubblewrap config
           mkdir -p ~/.bubblewrap
@@ -58,14 +47,16 @@ jobs:
           { "jdkPath": "${JAVA_HOME}", "androidSdkPath": "/usr/local/lib/android/sdk" }
           EOF
 
-          # Tamamen non-interaktif init
+          # *** KRİTİK: local dosyayı URL'e çeviriyoruz ***
+          MANIFEST_URL="file://$PWD/static/manifest.json"
+
           npx bubblewrap init \
-            --manifest="${{ env.MANIFEST_URL }}" \
+            --manifest="${MANIFEST_URL}" \
             --directory . \
             --skipPwaValidation \
             --no-input \
             --host=picnic-3.onrender.com \
-            --applicationId=com.picnic3.onrender \
+            --applicationId=com.onrender.picnic3.twa \
             --name="Picnic Vakti" \
             --launcherName="Picnic" \
             --startUrl="/" \
