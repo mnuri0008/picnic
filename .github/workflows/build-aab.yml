@@ -27,31 +27,26 @@ jobs:
       - name: Install Bubblewrap CLI (pin)
         run: npm i -g @bubblewrap/cli@1.24.1
 
-      # Keystore'u secret'tan geri yükle (zorunlu)
+      # Keystore'u GitHub Secrets'tan geri yükle
       - name: Restore signing.keystore from secrets
         shell: bash
         run: |
+          set -euo pipefail
           test -n "${{ secrets.SIGNING_KEYSTORE_BASE64 }}" || { echo "Missing SIGNING_KEYSTORE_BASE64 secret"; exit 1; }
           echo "${{ secrets.SIGNING_KEYSTORE_BASE64 }}" | base64 -d > signing.keystore
           test -s signing.keystore || { echo "signing.keystore could not be created"; exit 1; }
           echo "✅ Keystore restored (size: $(stat -c%s signing.keystore) bytes)"
 
-      # Yerel TWA manifest ile, interaktif soruları tamamen kapatarak init
-            - name: Init TWA from local WEB manifest (no prompts)
+      # WEB manifest'ten (repo içindeki) TWA projesini interaktif sormadan başlat
+      - name: Init TWA from local WEB manifest (no prompts)
         shell: bash
         run: |
           set -euo pipefail
 
           echo "🧩 Checking WEB manifest file..."
-          if [ ! -f static/manifest.json ]; then
-            echo "❌ static/manifest.json bulunamadı!"
-            ls -la static || true
-            exit 1
-          fi
+          test -f static/manifest.json || { echo "❌ static/manifest.json bulunamadı!"; ls -la static || true; exit 1; }
 
           echo "✅ WEB manifest bulundu, başlatılıyor..."
-
-          # Bubblewrap config (JDK + Android SDK)
           mkdir -p ~/.bubblewrap
           cat > ~/.bubblewrap/config.json <<JSON
           {
@@ -78,10 +73,24 @@ jobs:
 
           echo "✅ TWA initialized successfully."
 
-echo "✅ Keystore restored ..."
-# ↓
-- name: Init TWA from local WEB manifest (no prompts)
-  shell: bash
-  run: |
-    set -euo pipefail
-    ...
+      # İmzalı .aab build et
+      - name: Build signed AAB
+        shell: bash
+        env:
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          npx bubblewrap build \
+            --signingKey=signing.keystore \
+            --signingKeyAlias="${KEY_ALIAS:-upload}" \
+            --signingKeyPassword="${KEY_PASSWORD:-picnic123}" \
+            --keyStorePassword="${KEYSTORE_PASSWORD:-picnic123}"
+
+      # Çıkan .aab dosyasını artefakt olarak yükle
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: picnic-aab
+          path: "**/*.aab"
