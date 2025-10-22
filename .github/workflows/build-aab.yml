@@ -8,6 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,32 +24,35 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Install Bubblewrap CLI (pin 1.24.1)
+      - name: Install Bubblewrap CLI (v1.24.1)
         run: npm i -g @bubblewrap/cli@1.24.1
 
       - name: Restore signing.keystore from secrets
         shell: bash
         run: |
           set -euo pipefail
-          test -n "${{ secrets.SIGNING_KEYSTORE_BASE64 }}" || { echo "Missing SIGNING_KEYSTORE_BASE64 secret"; exit 1; }
+          test -n "${{ secrets.SIGNING_KEYSTORE_BASE64 }}" || { echo "❌ Missing SIGNING_KEYSTORE_BASE64 secret"; exit 1; }
           echo "${{ secrets.SIGNING_KEYSTORE_BASE64 }}" | base64 -d > signing.keystore
-          test -s signing.keystore || { echo "signing.keystore could not be created"; exit 1; }
-          echo "Keystore restored (size: $(stat -c%s signing.keystore) bytes)"
+          test -s signing.keystore || { echo "❌ signing.keystore could not be created"; exit 1; }
+          echo "✅ Keystore restored (size: $(stat -c%s signing.keystore) bytes)"
 
       - name: Init TWA from local manifest (no prompts)
         shell: bash
         run: |
           set -euo pipefail
-          test -f static/manifest.json || { echo "static/manifest.json yok"; exit 1; }
+          echo "🧩 Checking WEB manifest file..."
+          test -f static/manifest.json || { echo "❌ static/manifest.json bulunamadı!"; ls -la static || true; exit 1; }
+          echo "✅ WEB manifest bulundu."
 
-          # Bubblewrap config
+          # Bubblewrap config (JDK/SDK)
           mkdir -p ~/.bubblewrap
           cat > ~/.bubblewrap/config.json <<EOF
           { "jdkPath": "${JAVA_HOME}", "androidSdkPath": "/usr/local/lib/android/sdk" }
           EOF
 
-          # *** KRİTİK: local dosyayı URL'e çeviriyoruz ***
+          # 🔥 En kritik satır: file:// ile tam yol kullanıyoruz
           MANIFEST_URL="file://$PWD/static/manifest.json"
+          echo "Using manifest: $MANIFEST_URL"
 
           npx bubblewrap init \
             --manifest="${MANIFEST_URL}" \
