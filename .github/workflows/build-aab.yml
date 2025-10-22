@@ -31,29 +31,31 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -n "${{ secrets.SIGNING_KEYSTORE_BASE64 }}" || { echo "❌ Missing SIGNING_KEYSTORE_BASE64 secret"; exit 1; }
+          test -n "${{ secrets.SIGNING_KEYSTORE_BASE64 }}" || { echo "❌ Missing SIGNING_KEYSTORE_BASE64"; exit 1; }
           echo "${{ secrets.SIGNING_KEYSTORE_BASE64 }}" | base64 -d > signing.keystore
           test -s signing.keystore || { echo "❌ signing.keystore could not be created"; exit 1; }
           echo "✅ Keystore restored (size: $(stat -c%s signing.keystore) bytes)"
 
-      - name: Init TWA from local manifest (no prompts)
+      - name: Init TWA from local WEB manifest (no prompts)
         shell: bash
         run: |
           set -euo pipefail
-          echo "🧩 Checking WEB manifest file..."
-          test -f static/manifest.json || { echo "❌ static/manifest.json bulunamadı!"; ls -la static || true; exit 1; }
-          echo "✅ WEB manifest bulundu."
 
-          # Bubblewrap config (JDK/SDK)
+          echo "🧩 Checking WEB manifest file..."
+          test -f static/manifest.json || { echo "❌ static/manifest.json yok"; ls -la static || true; exit 1; }
+
+          # Mutlak DOSYA URL'sine çevir (file://...)
+          MANIFEST_PATH="$PWD/static/manifest.json"
+          MANIFEST_URL="file://${MANIFEST_PATH}"
+          echo "Using manifest: $MANIFEST_URL"
+
+          # Bubblewrap config (JDK & Android SDK yolları)
           mkdir -p ~/.bubblewrap
           cat > ~/.bubblewrap/config.json <<EOF
           { "jdkPath": "${JAVA_HOME}", "androidSdkPath": "/usr/local/lib/android/sdk" }
           EOF
 
-          # 🔥 En kritik satır: file:// ile tam yol kullanıyoruz
-          MANIFEST_URL="file://$PWD/static/manifest.json"
-          echo "Using manifest: $MANIFEST_URL"
-
+          # Non-interactive init — hiç soru sormasın
           npx bubblewrap init \
             --manifest="${MANIFEST_URL}" \
             --directory . \
