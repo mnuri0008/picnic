@@ -37,20 +37,36 @@ jobs:
           echo "✅ Keystore restored (size: $(stat -c%s signing.keystore) bytes)"
 
       # Yerel TWA manifest ile, interaktif soruları tamamen kapatarak init
-      - name: Init TWA from local manifest (no prompts)
+       - name: Init TWA from local WEB manifest (no prompts)
         shell: bash
         run: |
           set -euo pipefail
+
+          # WEB manifest dosyası gerçekten var mı, önce kontrol et
+          test -f static/manifest.json || { echo "static/manifest.json bulunamadı"; ls -la; exit 1; }
+
+          # Bubblewrap config (JDK/SDK yolları)
           mkdir -p ~/.bubblewrap
           cat > ~/.bubblewrap/config.json <<JSON
           { "jdkPath": "${{ env.JAVA_HOME }}", "androidSdkPath": "/usr/local/lib/android/sdk" }
           JSON
-          # Her zaman yerel manifest'ten init -> soru yok
+
+          echo "Using WEB manifest: static/manifest.json"
           npx bubblewrap init \
-            --manifest=twa-manifest.json \
+            --manifest=static/manifest.json \
             --directory . \
             --skipPwaValidation \
-            --no-input
+            --no-input \
+            --host=picnic-3.onrender.com \
+            --applicationId=com.onrender.picnic_3.twa \
+            --name="Picnic Vakti" \
+            --launcherName="Picnic" \
+            --startUrl="/" \
+            --display="standalone" \
+            --fallbackType="customtabs" \
+            --iconUrl="https://picnic-3.onrender.com/static/icons/icon-512.png" \
+            --maskableIconUrl="https://picnic-3.onrender.com/static/icons/icon-512.png"
+
 
       - name: Build signed AAB
         shell: bash
