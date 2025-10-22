@@ -5,19 +5,19 @@ on:
   push:
     branches: [ main ]
 
-env:
-  MANIFEST_URL: https://picnic-3.onrender.com/manifest.json
-  HOST_NAME: picnic-3.onrender.com
-  APP_ID: com.onrender.picnic3.twa
-  APP_NAME: Picnic Vakti
-  LAUNCHER_NAME: Picnic
-  START_URL: /
-  DISPLAY_MODE: standalone
-  FALLBACK_TYPE: customtabs
-
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    env:
+      WEB_MANIFEST_URL: https://picnic-3.onrender.com/manifest.json
+      HOST_NAME: picnic-3.onrender.com
+      PACKAGE_ID: com.onrender.picnic3.twa
+      APP_NAME: Picnic Vakti
+      LAUNCHER_NAME: Picnic
+      START_URL: /
+      THEME_COLOR: "#FF6600"
+      BG_COLOR: "#FFFFFF"
 
     steps:
       - name: Checkout
@@ -37,12 +37,12 @@ jobs:
       - name: Install Bubblewrap CLI (pinned)
         run: npm i -g @bubblewrap/cli@1.24.1
 
-      # Keystore'u secrets'tan çıkar (ZORUNLU: SIGNING_KEYSTORE_BASE64)
+      # ---- Keystore'u Secrets'tan çıkar (ZORUNLU: SIGNING_KEYSTORE_BASE64) ----
       - name: Restore signing.keystore
         shell: bash
         run: |
           set -euo pipefail
-          test -n "${{ secrets.SIGNING_KEYSTORE_BASE64 }}" || { echo "Missing SIGNING_KEYSTORE_BASE64 secret"; exit 1; }
+          test -n "${{ secrets.SIGNING_KEYSTORE_BASE64 }}" || { echo "Missing SIGNING_KEYSTORE_BASE64"; exit 1; }
           echo "${{ secrets.SIGNING_KEYSTORE_BASE64 }}" | base64 -d > signing.keystore
           test -s signing.keystore || { echo "signing.keystore could not be created"; exit 1; }
           echo "✅ Keystore restored (size: $(stat -c%s signing.keystore) bytes)"
@@ -53,43 +53,50 @@ jobs:
           set -euo pipefail
           mkdir -p ~/.bubblewrap
           cat > ~/.bubblewrap/config.json <<JSON
-          {
-            "jdkPath": "${{ env.JAVA_HOME }}",
-            "androidSdkPath": "/usr/local/lib/android/sdk"
-          }
+          { "jdkPath": "${{ env.JAVA_HOME }}", "androidSdkPath": "/usr/local/lib/android/sdk" }
           JSON
 
-      - name: Check manifest reachability
+      # ---- prompt gerektirmeyen TWA manifestini oluştur ----
+      - name: Create twa-manifest.json
         shell: bash
         run: |
           set -euo pipefail
-          curl -sSIL "$MANIFEST_URL" | head -n1
+          cat > twa-manifest.json <<JSON
+          {
+            "packageId": "${PACKAGE_ID}",
+            "host": "${HOST_NAME}",
+            "name": "${APP_NAME}",
+            "launcherName": "${LAUNCHER_NAME}",
+            "display": "standalone",
+            "themeColor": "${THEME_COLOR}",
+            "backgroundColor": "${BG_COLOR}",
+            "startUrl": "${START_URL}",
+            "fallbackType": "customtabs",
+            "enableNotifications": false,
+            "appVersionName": "1.0.0",
+            "appVersionCode": 1,
+            "minSdkVersion": 19,
+            "webManifestUrl": "${WEB_MANIFEST_URL}",
+            "iconUrl": "https://picnic-3.onrender.com/static/icons/icon-512.png",
+            "maskableIconUrl": "https://picnic-3.onrender.com/static/icons/icon-512.png"
+          }
+          JSON
+          echo "twa-manifest.json written:"
+          cat twa-manifest.json
 
-      # TÜM PROMPTLARA SIRAYLA CEVAP VER: domain, path, keystore, alias
-      - name: Init TWA (fully non-interactive)
+      # ---- TWA init (tamamen non-interactive) ----
+      - name: Init TWA from twa-manifest.json (no prompts)
         shell: bash
-        env:
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
           set -euo pipefail
-          DOMAIN="$HOST_NAME"
-          URLPATH="${START_URL}"
-          KEYSTORE="$GITHUB_WORKSPACE/signing.keystore"
-          ALIAS="${KEY_ALIAS:-upload}"
-
-          printf "%s\n%s\n%s\n%s\n" "$DOMAIN" "$URLPATH" "$KEYSTORE" "$ALIAS" | npx bubblewrap init \
-            --manifest="$MANIFEST_URL" \
+          npx bubblewrap init \
+            --manifest=twa-manifest.json \
             --directory . \
             --skipPwaValidation \
-            --no-input \
-            --host="$HOST_NAME" \
-            --applicationId="$APP_ID" \
-            --name="$APP_NAME" \
-            --launcherName="$LAUNCHER_NAME" \
-            --startUrl="$START_URL" \
-            --display="$DISPLAY_MODE" \
-            --fallbackType="$FALLBACK_TYPE"
+            --no-input
+          echo "✅ bubblewrap init finished."
 
+      # ---- İmzalı AAB build ----
       - name: Build signed AAB
         shell: bash
         env:
@@ -104,6 +111,7 @@ jobs:
             --signingKeyAlias="${KEY_ALIAS:-upload}" \
             --keyStorePassword="${KEYSTORE_PASSWORD:-picnic123}" \
             --signingKeyPassword="${KEY_PASSWORD:-picnic123}"
+          echo "✅ AAB built."
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
