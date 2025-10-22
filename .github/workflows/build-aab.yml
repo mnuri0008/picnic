@@ -39,9 +39,22 @@ jobs:
           test -s signing.keystore || { echo "signing.keystore could not be created"; exit 1; }
           echo "Keystore restored (size: $(stat -c%s signing.keystore) bytes)"
 
-      - name: Init TWA from WEB manifest (skip validation)
+      - name: Prepare and Init TWA (non-interactive, skip validation)
         run: |
-          yes n | bubblewrap init --manifest="$MANIFEST_URL" --directory . --skipPwaValidation
+          echo "📦 Preparing Bubblewrap config..."
+          mkdir -p ~/.bubblewrap
+          cat > ~/.bubblewrap/config.json <<'JSON'
+          {
+    "jdkPath": "${{ env.JAVA_HOME }}",
+      "androidSdkPath": "/usr/local/lib/android/sdk"
+    }
+    JSON
+
+    echo "🚀 Initializing TWA from manifest file..."
+    npx bubblewrap init --manifest=twa-manifest.json --directory . --skipPwaValidation --no-input
+
+    echo "✅ TWA initialization complete."
+
 
       - name: Build signed AAB
         env:
