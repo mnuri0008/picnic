@@ -3,10 +3,9 @@
     "relation": ["delegate_permission/common.handle_all_urls"],
     "target": {
       "namespace": "android_app",
-      "package_name": "com.asen.picnic",
-      "sha256_cert_fingerprints": [
-        "95:FA:3B:74:B6:39:65:8E:FA:7E:E6:49:D5:01:45:1E:CE:C9:16:35:C8:49:2A:8B:76:B0:DC:29:C2:19:70:8A"
-      ]
+      "package_name": "com.onrender.picnic_3.twa",
+      "sha256_cert_fingerprints":
+        ["95:FA:3B:74:B6:39:65:8E:FA:7E:E6:49:D5:01:45:1E:CE:C9:16:35:C8:49:2A:8B:76:B0:DC:29:C2:19:70:8A"]
     }
   }
 ]
