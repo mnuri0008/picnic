@@ -1,4 +1,4 @@
-name: Build AAB from PWA
+name: Build Android AAB (Capacitor – no prompts)
 
 on:
   workflow_dispatch:
@@ -10,14 +10,9 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      WEB_MANIFEST_URL: https://picnic-3.onrender.com/manifest.json
-      HOST_NAME: picnic-3.onrender.com
-      PACKAGE_ID: com.onrender.picnic3.twa
-      APP_NAME: Picnic Vakti
-      LAUNCHER_NAME: Picnic
-      START_URL: /
-      THEME_COLOR: "#FF6600"
-      BG_COLOR: "#FFFFFF"
+      APP_ID: com.onrender.picnic3
+      APP_NAME: "Picnic Vakti"
+      SITE_URL: https://picnic-3.onrender.com
 
     steps:
       - name: Checkout
@@ -34,70 +29,53 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install Bubblewrap CLI (pinned)
-        run: npm i -g @bubblewrap/cli@1.24.1
+      - name: Install Capacitor toolchain
+        run: |
+          npm i -g npm@10
+          mkdir mobile && cd mobile
+          npm init -y
+          npm i @capacitor/core @capacitor/cli @capacitor/android
 
-      # ---- Keystore'u Secrets'tan çıkar (ZORUNLU: SIGNING_KEYSTORE_BASE64) ----
-      - name: Restore signing.keystore
+      - name: Create Capacitor config (points to your live site)
+        working-directory: mobile
+        run: |
+          cat > capacitor.config.json <<JSON
+          {
+            "appId": "${APP_ID}",
+            "appName": "${APP_NAME}",
+            "webDir": "dist",
+            "bundledWebRuntime": false,
+            "server": {
+              "url": "${SITE_URL}",
+              "cleartext": false
+            }
+          }
+          JSON
+          # dummy dist (gerekmiyor ama cli şikayet etmesin)
+          mkdir -p dist
+          echo "<html><body>Capacitor shell</body></html>" > dist/index.html
+
+      - name: Add Android platform (no prompts)
+        working-directory: mobile
+        run: |
+          npx cap add android
+          # Android SDK yolu bubblewrap olmadan da hazır
+          echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+
+      # ---- Keystore'u secrets'tan çıkar ----
+      - name: Restore signing keystore
+        working-directory: mobile/android/app
         shell: bash
         run: |
           set -euo pipefail
           test -n "${{ secrets.SIGNING_KEYSTORE_BASE64 }}" || { echo "Missing SIGNING_KEYSTORE_BASE64"; exit 1; }
-          echo "${{ secrets.SIGNING_KEYSTORE_BASE64 }}" | base64 -d > signing.keystore
-          test -s signing.keystore || { echo "signing.keystore could not be created"; exit 1; }
-          echo "✅ Keystore restored (size: $(stat -c%s signing.keystore) bytes)"
+          echo "${{ secrets.SIGNING_KEYSTORE_BASE64 }}" | base64 -d > upload.keystore
+          test -s upload.keystore || { echo "upload.keystore could not be created"; exit 1; }
+          echo "✅ Keystore restored (size: $(stat -c%s upload.keystore) bytes)"
 
-      - name: Configure Bubblewrap paths
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p ~/.bubblewrap
-          cat > ~/.bubblewrap/config.json <<JSON
-          { "jdkPath": "${{ env.JAVA_HOME }}", "androidSdkPath": "/usr/local/lib/android/sdk" }
-          JSON
-
-      # ---- prompt gerektirmeyen TWA manifestini oluştur ----
-      - name: Create twa-manifest.json
-        shell: bash
-        run: |
-          set -euo pipefail
-          cat > twa-manifest.json <<JSON
-          {
-            "packageId": "${PACKAGE_ID}",
-            "host": "${HOST_NAME}",
-            "name": "${APP_NAME}",
-            "launcherName": "${LAUNCHER_NAME}",
-            "display": "standalone",
-            "themeColor": "${THEME_COLOR}",
-            "backgroundColor": "${BG_COLOR}",
-            "startUrl": "${START_URL}",
-            "fallbackType": "customtabs",
-            "enableNotifications": false,
-            "appVersionName": "1.0.0",
-            "appVersionCode": 1,
-            "minSdkVersion": 19,
-            "webManifestUrl": "${WEB_MANIFEST_URL}",
-            "iconUrl": "https://picnic-3.onrender.com/static/icons/icon-512.png",
-            "maskableIconUrl": "https://picnic-3.onrender.com/static/icons/icon-512.png"
-          }
-          JSON
-          echo "twa-manifest.json written:"
-          cat twa-manifest.json
-
-      # ---- TWA init (tamamen non-interactive) ----
-      - name: Init TWA from twa-manifest.json (no prompts)
-        shell: bash
-        run: |
-          set -euo pipefail
-          npx bubblewrap init \
-            --manifest=twa-manifest.json \
-            --directory . \
-            --skipPwaValidation \
-            --no-input
-          echo "✅ bubblewrap init finished."
-
-      # ---- İmzalı AAB build ----
-      - name: Build signed AAB
+      # ---- Gradle'a release imzasını enjekte et ----
+      - name: Configure Gradle signing for release
+        working-directory: mobile/android/app
         shell: bash
         env:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
@@ -105,16 +83,50 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          npx bubblewrap build \
-            --no-input \
-            --signingKey="$GITHUB_WORKSPACE/signing.keystore" \
-            --signingKeyAlias="${KEY_ALIAS:-upload}" \
-            --keyStorePassword="${KEYSTORE_PASSWORD:-picnic123}" \
-            --signingKeyPassword="${KEY_PASSWORD:-picnic123}"
-          echo "✅ AAB built."
+          BGF=build.gradle
+          echo "Patching $BGF for release signing..."
+          # signingConfigs.release bloğu yoksa ekleyelim:
+          awk '
+            BEGIN{added=0}
+            /android \{/ && added==0 {
+              print; print "    signingConfigs {"; 
+              print "        release {"; 
+              print "            storeFile file(\"upload.keystore\")"; 
+              print "            storePassword System.getenv(\"KEYSTORE_PASSWORD\")"; 
+              print "            keyAlias System.getenv(\"KEY_ALIAS\")"; 
+              print "            keyPassword System.getenv(\"KEY_PASSWORD\")"; 
+              print "        }"; 
+              print "    }"; 
+              next
+            }
+            /buildTypes \{/ && added==0 {
+              print; 
+              print "        release {"; 
+              print "            signingConfig signingConfigs.release"; 
+              print "            minifyEnabled false"; 
+              print "            shrinkResources false"; 
+              print "        }";
+              added=1; 
+              next
+            }
+            {print}
+          ' "$BGF" > tmp.gradle && mv tmp.gradle "$BGF"
+          echo "✅ Gradle signing patch done."
+
+      # ---- AAB derle ----
+      - name: Build AAB (bundleRelease)
+        working-directory: mobile/android
+        env:
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon clean bundleRelease
+          ls -lah app/build/outputs/bundle/release
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
         with:
-          name: picnic-aab
-          path: "**/*.aab"
+          name: picnic-capacitor-aab
+          path: mobile/android/app/build/outputs/bundle/release/*.aab
