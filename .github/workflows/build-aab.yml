@@ -36,7 +36,8 @@ jobs:
           test -s signing.keystore || { echo "❌ signing.keystore could not be created"; exit 1; }
           echo "✅ Keystore restored (size: $(stat -c%s signing.keystore) bytes)"
 
-      - name: Init TWA from WEB manifest (no prompts, skip validation)
+      # ------- TEK DOĞRU INIT: HTTPS MANIFEST ----------
+      - name: Init TWA from WEB manifest (no prompts)
         shell: bash
         env:
           MANIFEST_URL: https://picnic-3.onrender.com/static/manifest.json
@@ -44,21 +45,19 @@ jobs:
           set -euo pipefail
 
           echo "🔎 Checking manifest URL: $MANIFEST_URL"
-          # JSON döndüğünü doğrula (HTML/502 gelirse burada yakalanır)
-          curl -fsSL "$MANIFEST_URL" | head -c 200 | grep -q '"name"' || { 
+          curl -fsSL "$MANIFEST_URL" | head -c 200 | grep -q '"name"' || {
             echo "❌ Manifest JSON değil ya da ulaşılamıyor: $MANIFEST_URL"
             curl -iS "$MANIFEST_URL" || true
             exit 1
           }
           echo "✅ Manifest OK"
 
-          # Bubblewrap config (JDK & Android SDK)
           mkdir -p ~/.bubblewrap
           cat > ~/.bubblewrap/config.json <<EOF
           { "jdkPath": "${JAVA_HOME}", "androidSdkPath": "/usr/local/lib/android/sdk" }
           EOF
 
-          echo "🚀 bubblewrap init"
+          echo "🚀 bubblewrap init (HTTPS manifest)"
           npx bubblewrap init \
             --manifest="$MANIFEST_URL" \
             --directory . \
