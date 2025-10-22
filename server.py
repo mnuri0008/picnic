@@ -2,10 +2,15 @@ from flask import Flask, render_template, request, jsonify, abort, send_from_dir
 from datetime import datetime, timedelta
 import threading, itertools
 
-# static_url_path='/static' diyerek Flask'ın static mapping'i netleştirelim
-app = Flask(__name__, static_folder='static', static_url_path='/static', template_folder='templates')
+# Flask yapılandırması
+app = Flask(
+    __name__,
+    static_folder='static',
+    static_url_path='/static',
+    template_folder='templates'
+)
 
-# ------- ICON ALIASES (PWABuilder'ın bekledikleri 200 dönsün) -------
+# ------- ICON ALIASES (PWABuilder veya Play isteği 200 dönsün) -------
 @app.route("/static/icons/icon-192.png")
 def icon_192():
     return send_from_directory("static/icons", "icon-192.png", mimetype="image/png")
@@ -14,7 +19,6 @@ def icon_192():
 def icon_512():
     return send_from_directory("static/icons", "icon-512.png", mimetype="image/png")
 
-# Eski adlar da 200 dönsün (bazı araçlar bu yolları çağırıyor)
 @app.route("/static/icons/picnic-icon-192.png")
 def picnic_icon_192():
     return send_from_directory("static/icons", "icon-192.png", mimetype="image/png")
@@ -23,11 +27,7 @@ def picnic_icon_192():
 def picnic_icon_512():
     return send_from_directory("static/icons", "icon-512.png", mimetype="image/png")
 
-
-from flask import Flask, render_template, request, jsonify, abort, send_from_directory, make_response
-# ... (diğer importlar ve app = Flask(...))
-
-# ------- PWA DOSYALARI -------
+# ------- PWA DOSYALARI (manifest + service worker) -------
 @app.route('/manifest.json')
 def manifest():
     resp = make_response(send_from_directory(app.static_folder, 'manifest.json'))
@@ -41,32 +41,28 @@ def service_worker():
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     return resp
 
-# ------- Digital Asset Links (TWA) -------
-# Sadece BU route kalsın. Dosya: static/.well-known/assetlinks.json
+# ------- Digital Asset Links (TWA doğrulaması) -------
 @app.route('/.well-known/assetlinks.json')
 def assetlinks():
     return send_from_directory('static/.well-known', 'assetlinks.json', mimetype='application/json')
 
 
 # -------------------- APP LOGIC --------------------
-# In-memory “DB”
 ROOMS = {}  # code -> {"owner": str, "date": str(ISO minutes), "items":[{...}]}
 IDGEN = itertools.count(1)
 LOCK = threading.Lock()
 
-def mask(code: str) -> str:  # 28** gibi göstermelik
+def mask(code: str) -> str:
     code = str(code or "")
     return f"{code[:2]}**" if len(code) >= 2 else (code + "*")
 
 def now_iso() -> str:
-    # ISO benzeri, dakika hassasiyetinde (YYYY-MM-DDTHH:MM)
     return datetime.utcnow().isoformat(timespec="minutes")
 
 def _as_dt(s: str):
     if not s:
         return None
     try:
-        # RFC3339 'Z' son ekini tolere et
         return datetime.fromisoformat(s.replace('Z', '')).replace(second=0, microsecond=0)
     except Exception:
         try:
@@ -79,9 +75,8 @@ def _as_dt(s: str):
 @app.route("/")
 def home():
     lang = request.args.get("lang", "tr")
-
-    # 10 günü geçen (piknik tarihinden itibaren) odaları temizle
     now = datetime.utcnow()
+
     with LOCK:
         to_delete = []
         for code, r in list(ROOMS.items()):
@@ -91,7 +86,6 @@ def home():
         for c in to_delete:
             ROOMS.pop(c, None)
 
-        # Liste için görüntü verisi
         rooms = []
         for code, r in ROOMS.items():
             d_str = r.get("date") or ""
@@ -115,7 +109,6 @@ def home():
 def room(code):
     username = request.args.get("username", "guest")
     lang = request.args.get("lang", "tr")
-    # “Gör” linkinden gelindiyse sadece görüntüleme modu
     view = request.args.get("view") == "1"
     return render_template("room.html", code=code, username=username, lang=lang, view=view)
 
@@ -128,7 +121,7 @@ def api_create_room():
     if not code:
         abort(400, description="code required")
     owner = (data.get("owner") or "").strip()
-    date  = (data.get("date") or now_iso())[:16]  # dakika hassasiyeti
+    date  = (data.get("date") or now_iso())[:16]
     with LOCK:
         ROOMS.setdefault(code, {"owner": owner, "date": date, "items": []})
     return "", 201
@@ -217,6 +210,6 @@ def api_del_item(code, item_id):
     abort(404)
 
 
+# ------- Ana çalıştırma -------
 if __name__ == "__main__":
-    # Render/Heroku stilinde local run
     app.run(debug=True, host="0.0.0.0", port=8000)
