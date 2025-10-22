@@ -36,28 +36,31 @@ jobs:
           test -s signing.keystore || { echo "❌ signing.keystore could not be created"; exit 1; }
           echo "✅ Keystore restored (size: $(stat -c%s signing.keystore) bytes)"
 
-      - name: Init TWA from local WEB manifest (no prompts)
+      - name: Init TWA from WEB manifest (no prompts, skip validation)
         shell: bash
+        env:
+          MANIFEST_URL: https://picnic-3.onrender.com/static/manifest.json
         run: |
           set -euo pipefail
 
-          echo "🧩 Checking WEB manifest file..."
-          test -f static/manifest.json || { echo "❌ static/manifest.json yok"; ls -la static || true; exit 1; }
+          echo "🔎 Checking manifest URL: $MANIFEST_URL"
+          # JSON döndüğünü doğrula (HTML/502 gelirse burada yakalanır)
+          curl -fsSL "$MANIFEST_URL" | head -c 200 | grep -q '"name"' || { 
+            echo "❌ Manifest JSON değil ya da ulaşılamıyor: $MANIFEST_URL"
+            curl -iS "$MANIFEST_URL" || true
+            exit 1
+          }
+          echo "✅ Manifest OK"
 
-          # Mutlak DOSYA URL'sine çevir (file://...)
-          MANIFEST_PATH="$PWD/static/manifest.json"
-          MANIFEST_URL="file://${MANIFEST_PATH}"
-          echo "Using manifest: $MANIFEST_URL"
-
-          # Bubblewrap config (JDK & Android SDK yolları)
+          # Bubblewrap config (JDK & Android SDK)
           mkdir -p ~/.bubblewrap
           cat > ~/.bubblewrap/config.json <<EOF
           { "jdkPath": "${JAVA_HOME}", "androidSdkPath": "/usr/local/lib/android/sdk" }
           EOF
 
-          # Non-interactive init — hiç soru sormasın
+          echo "🚀 bubblewrap init"
           npx bubblewrap init \
-            --manifest="${MANIFEST_URL}" \
+            --manifest="$MANIFEST_URL" \
             --directory . \
             --skipPwaValidation \
             --no-input \
