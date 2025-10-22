@@ -36,7 +36,7 @@ jobs:
           test -s signing.keystore || { echo "❌ signing.keystore could not be created"; exit 1; }
           echo "✅ Keystore restored (size: $(stat -c%s signing.keystore) bytes)"
 
-      # ------- TEK DOĞRU INIT: HTTPS MANIFEST ----------
+      # ---- SADECE HTTPS MANIFEST İLE INIT (file:// YOK) ----
       - name: Init TWA from WEB manifest (no prompts)
         shell: bash
         env:
@@ -44,7 +44,15 @@ jobs:
         run: |
           set -euo pipefail
 
-          echo "🔎 Checking manifest URL: $MANIFEST_URL"
+          echo "🔗 Manifest URL: $MANIFEST_URL"
+          # Güvenlik: file:// yakalarsak direkt fail
+          if [[ "$MANIFEST_URL" =~ ^file: ]]; then
+            echo "❌ MANIFEST_URL 'file://' olamaz."; exit 1;
+          fi
+
+          # Manifest gerçekten JSON mu, kontrol et
+          status=$(curl -sS -o /dev/null -w '%{http_code}' "$MANIFEST_URL")
+          echo "HTTP $status"
           curl -fsSL "$MANIFEST_URL" | head -c 200 | grep -q '"name"' || {
             echo "❌ Manifest JSON değil ya da ulaşılamıyor: $MANIFEST_URL"
             curl -iS "$MANIFEST_URL" || true
@@ -52,12 +60,13 @@ jobs:
           }
           echo "✅ Manifest OK"
 
+          # Bubblewrap config
           mkdir -p ~/.bubblewrap
           cat > ~/.bubblewrap/config.json <<EOF
           { "jdkPath": "${JAVA_HOME}", "androidSdkPath": "/usr/local/lib/android/sdk" }
           EOF
 
-          echo "🚀 bubblewrap init (HTTPS manifest)"
+          echo "🚀 bubblewrap init"
           npx bubblewrap init \
             --manifest="$MANIFEST_URL" \
             --directory . \
