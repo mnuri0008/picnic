@@ -1,55 +1,36 @@
-name: Build AAB (Bubblewrap)
+name: Build AAB from PWA
 
 on:
   workflow_dispatch:
-    inputs:
-      manifest_url:
-        description: "Web manifest URL"
-        required: false
-        default: "https://picnic-3.onrender.com/manifest.json"
+  push:
+    branches: [ main ]
+
+env:
+  MANIFEST_URL: https://picnic-3.onrender.com/manifest.json
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      CI: "true"
-      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-      MANIFEST_URL: ${{ github.event.inputs.manifest_url || secrets.MANIFEST_URL || 'https://picnic-3.onrender.com/manifest.json' }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 20
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Node 20
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Setup Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: Setup Android SDK (cmdline-tools)
-        uses: android-actions/setup-android@v3
-
-      - name: Install required SDK packages
-        run: |
-          sdkmanager --sdk_root="$ANDROID_SDK_ROOT" --licenses <<< "y" > /dev/null
-          sdkmanager --sdk_root="$ANDROID_SDK_ROOT" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
-
-      - name: Install Bubblewrap
+      - name: Install Bubblewrap CLI
         run: npm i -g @bubblewrap/cli
 
-      - name: Configure Bubblewrap paths
-        run: |
-          mkdir -p ~/.bubblewrap
-          cat > ~/.bubblewrap/config.json <<'EOF'
-          { "jdkPath": "/opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17/x64", "androidSdkPath": "/usr/local/lib/android/sdk" }
-          EOF
-          echo "Bubblewrap: $(npx bubblewrap --version)"
-
+      # --- Keystore'u secrets'tan geri yükle ---
       - name: Restore signing.keystore from secrets
         shell: bash
         run: |
@@ -58,30 +39,25 @@ jobs:
           test -s signing.keystore || { echo "signing.keystore could not be created"; exit 1; }
           echo "Keystore restored (size: $(stat -c%s signing.keystore) bytes)"
 
-      - name: Bubblewrap init (from WEB manifest URL)
+      - name: Init TWA from WEB manifest (skip validation)
         run: |
-          # Init her zaman WEB manifest URL ister. TWA manifest dosyası DEĞİL.
-          yes n | npx bubblewrap init \
-            --manifest="${{ env.MANIFEST_URL }}" \
-            --directory . \
-            --skipPwaValidation
+          yes n | bubblewrap init --manifest="$MANIFEST_URL" --directory . --skipPwaValidation
 
-      - name: Build signed .aab
+      - name: Build signed AAB
         env:
-          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          npx bubblewrap build \
+          bubblewrap build \
             --signingKey=signing.keystore \
-            --signingKeyAlias="${SIGNING_KEY_ALIAS:-upload}" \
-            --keyStorePassword="${KEYSTORE_PASSWORD}" \
-            --signingKeyPassword="${SIGNING_KEY_PASSWORD}"
-          ls -al app/build/outputs/bundle/release || true
+            --signingKeyAlias="${KEY_ALIAS:-upload}" \
+            --signingKeyPassword="${KEY_PASSWORD:-picnic123}" \
+            --keyStorePassword="${KEYSTORE_PASSWORD:-picnic123}"
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
         with:
           name: picnic-aab
-          path: app/build/outputs/bundle/release/*.aab
-          if-no-files-found: error
+          path: |
+            **/*.aab
