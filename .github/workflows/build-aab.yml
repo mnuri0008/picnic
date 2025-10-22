@@ -1,9 +1,14 @@
-name: Build AAB from PWA
+name: Build AAB from PWA (promptsuz)
 
 on:
   workflow_dispatch:
   push:
     branches: [ main ]
+
+env:
+  MANIFEST_URL: https://picnic-3.onrender.com/static/manifest.json
+  HOST: picnic-3.onrender.com
+  APP_ID: com.onrender.picnic3.twa
 
 jobs:
   build:
@@ -17,68 +22,49 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: '17'
 
       - name: Setup Node 20
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: '20'
 
-      - name: Install Bubblewrap CLI (v1.24.1)
+      - name: Install Bubblewrap CLI
         run: npm i -g @bubblewrap/cli@1.24.1
 
       - name: Restore signing.keystore from secrets
         shell: bash
         run: |
           set -euo pipefail
-          test -n "${{ secrets.SIGNING_KEYSTORE_BASE64 }}" || { echo "❌ Missing SIGNING_KEYSTORE_BASE64"; exit 1; }
+          test -n "${{ secrets.SIGNING_KEYSTORE_BASE64 }}" || { echo "Missing SIGNING_KEYSTORE_BASE64 secret"; exit 1; }
           echo "${{ secrets.SIGNING_KEYSTORE_BASE64 }}" | base64 -d > signing.keystore
-          test -s signing.keystore || { echo "❌ signing.keystore could not be created"; exit 1; }
-          echo "✅ Keystore restored (size: $(stat -c%s signing.keystore) bytes)"
+          test -s signing.keystore || { echo "signing.keystore could not be created"; exit 1; }
+          echo "Keystore OK (size: $(stat -c%s signing.keystore) bytes)"
 
-      # ---- SADECE HTTPS MANIFEST İLE INIT (file:// YOK) ----
       - name: Init TWA from WEB manifest (no prompts)
         shell: bash
-        env:
-          MANIFEST_URL: https://picnic-3.onrender.com/static/manifest.json
         run: |
           set -euo pipefail
 
-          echo "🔗 Manifest URL: $MANIFEST_URL"
-          # Güvenlik: file:// yakalarsak direkt fail
-          if [[ "$MANIFEST_URL" =~ ^file: ]]; then
-            echo "❌ MANIFEST_URL 'file://' olamaz."; exit 1;
-          fi
-
-          # Manifest gerçekten JSON mu, kontrol et
-          status=$(curl -sS -o /dev/null -w '%{http_code}' "$MANIFEST_URL")
-          echo "HTTP $status"
-          curl -fsSL "$MANIFEST_URL" | head -c 200 | grep -q '"name"' || {
-            echo "❌ Manifest JSON değil ya da ulaşılamıyor: $MANIFEST_URL"
-            curl -iS "$MANIFEST_URL" || true
-            exit 1
-          }
-          echo "✅ Manifest OK"
-
-          # Bubblewrap config
+          # Bubblewrap config (JDK / Android SDK yolları)
           mkdir -p ~/.bubblewrap
-          cat > ~/.bubblewrap/config.json <<EOF
-          { "jdkPath": "${JAVA_HOME}", "androidSdkPath": "/usr/local/lib/android/sdk" }
-          EOF
+          cat > ~/.bubblewrap/config.json <<JSON
+          { "jdkPath": "${{ env.JAVA_HOME }}", "androidSdkPath": "/usr/local/lib/android/sdk" }
+          JSON
 
-          echo "🚀 bubblewrap init"
-          npx bubblewrap init \
-            --manifest="$MANIFEST_URL" \
+          # Promptsuz init: bütün sorulara otomatik boş yanıt
+          yes "" | npx bubblewrap init \
+            --manifest="${{ env.MANIFEST_URL }}" \
             --directory . \
             --skipPwaValidation \
             --no-input \
-            --host=picnic-3.onrender.com \
-            --applicationId=com.onrender.picnic3.twa \
+            --host="${{ env.HOST }}" \
+            --applicationId="${{ env.APP_ID }}" \
             --name="Picnic Vakti" \
             --launcherName="Picnic" \
             --startUrl="/" \
             --display="standalone" \
-            --fallbackType=customtabs \
+            --fallbackType="customtabs" \
             --iconUrl="https://picnic-3.onrender.com/static/icons/icon-512.png" \
             --maskableIconUrl="https://picnic-3.onrender.com/static/icons/icon-512.png"
 
