@@ -11,7 +11,6 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -38,12 +37,11 @@ jobs:
           test -s signing.keystore || { echo "signing.keystore could not be created"; exit 1; }
           echo "Keystore restored (size: $(stat -c%s signing.keystore) bytes)"
 
-      - name: Init TWA from WEB manifest (skip validation, no input)
+      - name: Init TWA from WEB manifest (skip validation)
         shell: bash
         run: |
           set -euo pipefail
-          echo "Checking manifest URL..."
-          curl -sSIL ${{ env.MANIFEST_URL }} | head -n 1
+          echo "Manifest HEAD:" && curl -sSIL ${{ env.MANIFEST_URL }} | head -n1
           mkdir -p ~/.bubblewrap
           cat > ~/.bubblewrap/config.json <<JSON
           { "jdkPath": "${{ env.JAVA_HOME }}", "androidSdkPath": "/usr/local/lib/android/sdk" }
