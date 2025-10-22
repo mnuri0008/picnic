@@ -5,10 +5,6 @@ on:
   push:
     branches: [ main ]
 
-env:
-  HOST: "picnic-3.onrender.com"
-  WEB_MANIFEST_URL: "https://picnic-3.onrender.com/manifest.json"
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -28,9 +24,10 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Install Bubblewrap CLI
-        run: npm i -g @bubblewrap/cli
+      - name: Install Bubblewrap CLI (pin)
+        run: npm i -g @bubblewrap/cli@1.24.1
 
+      # Keystore'u secret'tan geri yükle (zorunlu)
       - name: Restore signing.keystore from secrets
         shell: bash
         run: |
@@ -39,44 +36,21 @@ jobs:
           test -s signing.keystore || { echo "signing.keystore could not be created"; exit 1; }
           echo "✅ Keystore restored (size: $(stat -c%s signing.keystore) bytes)"
 
-      - name: Init TWA (auto domain + fallback manifest)
+      # Yerel TWA manifest ile, interaktif soruları tamamen kapatarak init
+      - name: Init TWA from local manifest (no prompts)
         shell: bash
         run: |
           set -euo pipefail
-          HOST="picnic-3.onrender.com"
-          WEB_MANIFEST_URL="https://picnic-3.onrender.com/manifest.json"
-
-          echo "🔍 Checking manifest URL..."
-          STATUS=$(curl -sSI "$WEB_MANIFEST_URL" | head -n1 | awk '{print $2}')
-          echo "HTTP status: ${STATUS:-unknown}"
-
-          if [ "${STATUS:-}" = "200" ]; then
-            MANIFEST_ARG="$WEB_MANIFEST_URL"
-            echo "Using WEB manifest: $MANIFEST_ARG"
-          else
-            MANIFEST_ARG="static/manifest.json"
-            echo "⚠️ Using local manifest fallback: $MANIFEST_ARG"
-          fi
-
           mkdir -p ~/.bubblewrap
           cat > ~/.bubblewrap/config.json <<JSON
           { "jdkPath": "${{ env.JAVA_HOME }}", "androidSdkPath": "/usr/local/lib/android/sdk" }
           JSON
-
-          printf '%s\n%s\n' "$HOST" "/" | npx bubblewrap init \
-            --manifest="$MANIFEST_ARG" \
+          # Her zaman yerel manifest'ten init -> soru yok
+          npx bubblewrap init \
+            --manifest=twa-manifest.json \
             --directory . \
             --skipPwaValidation \
-            --no-input \
-            --host="$HOST" \
-            --applicationId="com.onrender.picnic_3.twa" \
-            --name="Picnic Vakti" \
-            --launcherName="Picnic" \
-            --startUrl="/" \
-            --display="standalone" \
-            --fallbackType="customtabs" \
-            --iconUrl="https://$HOST/static/icons/icon-512.png" \
-            --maskableIconUrl="https://$HOST/static/icons/icon-512.png"
+            --no-input
 
       - name: Build signed AAB
         shell: bash
