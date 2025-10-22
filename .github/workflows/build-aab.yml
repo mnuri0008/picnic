@@ -38,26 +38,18 @@ jobs:
           test -s signing.keystore || { echo "signing.keystore could not be created"; exit 1; }
           echo "Keystore restored (size: $(stat -c%s signing.keystore) bytes)"
 
-      - name: Init TWA (download WEB manifest, skip validation)
+      - name: Init TWA from WEB manifest (skip validation, no input)
         shell: bash
         run: |
           set -euo pipefail
-          echo "URL: ${{ env.MANIFEST_URL }}"
-
-          # 1) Manifest'i indir
-          curl -fsSL "${{ env.MANIFEST_URL }}" -o /tmp/manifest.json
-          # 2) Basit doğrulama: JSON ve 'icons' alanı var mı?
-          jq -e '.name,.icons' /tmp/manifest.json >/dev/null
-
-          # 3) Bubblewrap config
+          echo "Checking manifest URL..."
+          curl -sSIL ${{ env.MANIFEST_URL }} | head -n 1
           mkdir -p ~/.bubblewrap
           cat > ~/.bubblewrap/config.json <<JSON
           { "jdkPath": "${{ env.JAVA_HOME }}", "androidSdkPath": "/usr/local/lib/android/sdk" }
           JSON
-
-          # 4) Local dosyadan init
           npx bubblewrap init \
-            --manifest=/tmp/manifest.json \
+            --manifest="${{ env.MANIFEST_URL }}" \
             --directory . \
             --skipPwaValidation \
             --no-input
