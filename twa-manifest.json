@@ -1,6 +1,6 @@
 {
   "packageId": "com.onrender.picnic_3.twa",
-  "host": "https://picnic-3.onrender.com",
+  "host": "picnic-3.onrender.com",
   "name": "Picnic Vakti",
   "launcherName": "Picnic",
   "display": "standalone",
