@@ -41,17 +41,23 @@ jobs:
 
       # Bubblewrap config + WEB manifest'ten init
       - name: Init TWA from WEB manifest (skip validation)
-        shell: bash
+         shell: bash
         run: |
+          echo "MANIFEST_URL = ${{ env.MANIFEST_URL }}"
+          # Manifest erişilebilir mi, önce kontrol et (404/502 vs. yakalar)
+          curl -I -sS ${{ env.MANIFEST_URL }} | head -n 1
+          # Bubblewrap config
           mkdir -p ~/.bubblewrap
           cat > ~/.bubblewrap/config.json <<JSON
           { "jdkPath": "${{ env.JAVA_HOME }}", "androidSdkPath": "/usr/local/lib/android/sdk" }
           JSON
+          # Sadece WEB manifest kullan!
           npx bubblewrap init \
             --manifest="${{ env.MANIFEST_URL }}" \
             --directory . \
             --skipPwaValidation \
             --no-input
+
 
       # İmzalı AAB build
       - name: Build signed AAB
