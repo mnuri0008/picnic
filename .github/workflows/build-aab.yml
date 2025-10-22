@@ -35,34 +35,8 @@ jobs:
           test -s signing.keystore || { echo "signing.keystore could not be created"; exit 1; }
           echo "✅ Keystore restored (size: $(stat -c%s signing.keystore) bytes)"
 
-      - name: Init TWA from local WEB manifest (no prompts)
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -f static/manifest.json || { echo "❌ static/manifest.json yok"; ls -la static || true; exit 1; }
-
-          # Bubblewrap config
-          mkdir -p ~/.bubblewrap
-          cat > ~/.bubblewrap/config.json <<JSON
-          { "jdkPath": "${{ env.JAVA_HOME }}", "androidSdkPath": "/usr/local/lib/android/sdk" }
-          JSON
-
-          # DİKKAT: host artık tam URL (https ile)
-          npx bubblewrap init \
-            --manifest=static/manifest.json \
-            --directory . \
-            --skipPwaValidation \
-            --no-input \
-            --host=https://picnic-3.onrender.com \
-            --applicationId=com.onrender.picnic_3.twa \
-            --name="Picnic Vakti" \
-            --launcherName="Picnic" \
-            --startUrl="/" \
-            --display="standalone" \
-            --fallbackType="customtabs" \
-            --iconUrl="https://picnic-3.onrender.com/static/icons/icon-512.png" \
-            --maskableIconUrl="https://picnic-3.onrender.com/static/icons/icon-512.png"
-
+         - name: Init TWA from local WEB manifest (no prompts)
+      
       - name: Build signed AAB
         shell: bash
         env:
