@@ -31,6 +31,12 @@ def manifest():
     # Bazı tarayıcılarda doğru tip önemli
     resp.mimetype = 'application/manifest+json'
     return resp
+from flask import send_from_directory
+
+@app.route('/.well-known/assetlinks.json')
+def assetlinks():
+    return send_from_directory('.', '.well-known/assetlinks.json',
+                               mimetype='application/json')
 
 @app.route('/service-worker.js')
 def service_worker():
