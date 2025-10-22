@@ -6,7 +6,8 @@ on:
     branches: [ main ]
 
 env:
-  MANIFEST_URL: "https://picnic-3.onrender.com/manifest.json"
+  HOST: "picnic-3.onrender.com"
+  WEB_MANIFEST_URL: "https://picnic-3.onrender.com/manifest.json"
 
 jobs:
   build:
@@ -38,31 +39,46 @@ jobs:
           test -s signing.keystore || { echo "signing.keystore could not be created"; exit 1; }
           echo "Keystore restored (size: $(stat -c%s signing.keystore) bytes)"
 
-      - name: Init TWA from WEB manifest (skip validation, no prompts)
+      - name: Init TWA (use WEB manifest if 200 else local)
         shell: bash
         run: |
           set -euo pipefail
-          echo "Manifest HEAD:" && curl -sSIL ${{ env.MANIFEST_URL }} | head -n1
+
+          echo "==> Check web manifest..."
+          STATUS=$(curl -sSI "$WEB_MANIFEST_URL" | head -n1 | awk '{print $2}')
+          echo "HTTP status: ${STATUS:-unknown}"
+
+          if [ "${STATUS:-}" = "200" ]; then
+            MANIFEST_ARG="$WEB_MANIFEST_URL"
+            echo "Using WEB manifest: $MANIFEST_ARG"
+          else
+            # Canlı URL 200 değilse repo’daki lokal manifest’e düş
+            test -f static/manifest.json || { echo "static/manifest.json not found"; exit 1; }
+            MANIFEST_ARG="static/manifest.json"
+            echo "Using LOCAL manifest: $MANIFEST_ARG"
+          fi
 
           mkdir -p ~/.bubblewrap
           cat > ~/.bubblewrap/config.json <<JSON
           { "jdkPath": "${{ env.JAVA_HOME }}", "androidSdkPath": "/usr/local/lib/android/sdk" }
           JSON
 
+          # Manifest hangi kaynaktan gelirse gelsin ikonları ve metadata’yı CLI ile veriyoruz,
+          # böylece indirirken hosta bağımlı kalmıyoruz.
           npx bubblewrap init \
-            --manifest="${{ env.MANIFEST_URL }}" \
+            --manifest="$MANIFEST_ARG" \
             --directory . \
             --skipPwaValidation \
             --no-input \
-            --host=picnic-3.onrender.com \
-            --applicationId=com.onrender.picnic_3.twa \
+            --host="${HOST}" \
+            --applicationId="com.onrender.picnic_3.twa" \
             --name="Picnic Vakti" \
             --launcherName="Picnic" \
             --startUrl="/" \
             --display="standalone" \
             --fallbackType="customtabs" \
-            --iconUrl="https://picnic-3.onrender.com/static/icons/icon-512.png" \
-            --maskableIconUrl="https://picnic-3.onrender.com/static/icons/icon-512.png"
+            --iconUrl="https://${HOST}/static/icons/icon-512.png" \
+            --maskableIconUrl="https://${HOST}/static/icons/icon-512.png"
 
       - name: Build signed AAB
         shell: bash
