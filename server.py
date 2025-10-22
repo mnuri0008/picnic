@@ -24,32 +24,28 @@ def picnic_icon_512():
     return send_from_directory("static/icons", "icon-512.png", mimetype="image/png")
 
 
-# ------- PWA DOSYALARI (kökten servis) -------
+from flask import Flask, render_template, request, jsonify, abort, send_from_directory, make_response
+# ... (diğer importlar ve app = Flask(...))
+
+# ------- PWA DOSYALARI -------
 @app.route('/manifest.json')
 def manifest():
     resp = make_response(send_from_directory(app.static_folder, 'manifest.json'))
-    # Bazı tarayıcılarda doğru tip önemli
     resp.mimetype = 'application/manifest+json'
     return resp
-from flask import send_from_directory
-
-@app.route('/.well-known/assetlinks.json')
-def assetlinks():
-    return send_from_directory('.', '.well-known/assetlinks.json',
-                               mimetype='application/json')
 
 @app.route('/service-worker.js')
 def service_worker():
-    # SW için no-cache header'ı verelim (update sorunsuz olsun)
     resp = make_response(send_from_directory(app.static_folder, 'service-worker.js'))
-    resp.mimetype = 'text/javascript'
+    resp.mimetype = 'application/javascript'
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     return resp
 
-# Digital Asset Links (TWA doğrulaması)
-@app.route("/.well-known/assetlinks.json")
+# ------- Digital Asset Links (TWA) -------
+# Sadece BU route kalsın. Dosya: static/.well-known/assetlinks.json
+@app.route('/.well-known/assetlinks.json')
 def assetlinks():
-    return send_from_directory("static/.well-known", "assetlinks.json", mimetype="application/json")
+    return send_from_directory('static/.well-known', 'assetlinks.json', mimetype='application/json')
 
 
 # -------------------- APP LOGIC --------------------
