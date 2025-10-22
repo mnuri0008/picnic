@@ -30,7 +30,6 @@ jobs:
       - name: Install Bubblewrap CLI
         run: npm i -g @bubblewrap/cli
 
-      # Keystore'u GitHub Secrets'tan geri yükle
       - name: Restore signing.keystore from secrets
         shell: bash
         run: |
@@ -39,27 +38,30 @@ jobs:
           test -s signing.keystore || { echo "signing.keystore could not be created"; exit 1; }
           echo "Keystore restored (size: $(stat -c%s signing.keystore) bytes)"
 
-      # Bubblewrap config + WEB manifest'ten init
-      - name: Init TWA from WEB manifest (skip validation)
-         shell: bash
+      - name: Init TWA (download WEB manifest, skip validation)
+        shell: bash
         run: |
-          echo "MANIFEST_URL = ${{ env.MANIFEST_URL }}"
-          # Manifest erişilebilir mi, önce kontrol et (404/502 vs. yakalar)
-          curl -I -sS ${{ env.MANIFEST_URL }} | head -n 1
-          # Bubblewrap config
+          set -euo pipefail
+          echo "URL: ${{ env.MANIFEST_URL }}"
+
+          # 1) Manifest'i indir
+          curl -fsSL "${{ env.MANIFEST_URL }}" -o /tmp/manifest.json
+          # 2) Basit doğrulama: JSON ve 'icons' alanı var mı?
+          jq -e '.name,.icons' /tmp/manifest.json >/dev/null
+
+          # 3) Bubblewrap config
           mkdir -p ~/.bubblewrap
           cat > ~/.bubblewrap/config.json <<JSON
           { "jdkPath": "${{ env.JAVA_HOME }}", "androidSdkPath": "/usr/local/lib/android/sdk" }
           JSON
-          # Sadece WEB manifest kullan!
+
+          # 4) Local dosyadan init
           npx bubblewrap init \
-            --manifest="${{ env.MANIFEST_URL }}" \
+            --manifest=/tmp/manifest.json \
             --directory . \
             --skipPwaValidation \
             --no-input
 
-
-      # İmzalı AAB build
       - name: Build signed AAB
         shell: bash
         env:
@@ -73,7 +75,6 @@ jobs:
             --signingKeyPassword="${KEY_PASSWORD:-picnic123}" \
             --keyStorePassword="${KEYSTORE_PASSWORD:-picnic123}"
 
-      # Çıkan .aab dosyasını artefakt olarak yükle
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
         with:
