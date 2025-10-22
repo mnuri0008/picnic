@@ -6,11 +6,12 @@ on:
     branches: [ main ]
 
 env:
-  MANIFEST_URL: https://picnic-3.onrender.com/manifest.json
+  MANIFEST_URL: "https://picnic-3.onrender.com/manifest.json"
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -19,12 +20,12 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
 
       - name: Setup Node 20
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
 
       - name: Install Bubblewrap CLI
         run: npm i -g @bubblewrap/cli
@@ -37,7 +38,7 @@ jobs:
           test -s signing.keystore || { echo "signing.keystore could not be created"; exit 1; }
           echo "Keystore restored (size: $(stat -c%s signing.keystore) bytes)"
 
-            - name: Init TWA from WEB manifest (skip validation, no prompts)
+      - name: Init TWA from WEB manifest (skip validation, no prompts)
         shell: bash
         run: |
           set -euo pipefail
@@ -62,7 +63,6 @@ jobs:
             --fallbackType="customtabs" \
             --iconUrl="https://picnic-3.onrender.com/static/icons/icon-512.png" \
             --maskableIconUrl="https://picnic-3.onrender.com/static/icons/icon-512.png"
-
 
       - name: Build signed AAB
         shell: bash
