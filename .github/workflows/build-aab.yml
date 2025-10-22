@@ -27,7 +27,6 @@ jobs:
       - name: Install Bubblewrap CLI (pin 1.24.1)
         run: npm i -g @bubblewrap/cli@1.24.1
 
-      # Keystore'u secret'tan geri yükle (zorunlu)
       - name: Restore signing.keystore from secrets
         shell: bash
         run: |
@@ -37,7 +36,6 @@ jobs:
           test -s signing.keystore || { echo "signing.keystore could not be created"; exit 1; }
           echo "✅ Keystore restored (size: $(stat -c%s signing.keystore) bytes)"
 
-      # TWA init - local manifest + no prompts
       - name: Init TWA from local WEB manifest (no prompts)
         shell: bash
         run: |
@@ -45,9 +43,7 @@ jobs:
 
           echo "🧩 Checking WEB manifest file..."
           test -f static/manifest.json || { echo "❌ static/manifest.json bulunamadı!"; ls -la static || true; exit 1; }
-
-          echo "✅ WEB manifest bulundu, başlatılıyor..."
-          echo "🔗 Using host: picnic-3.onrender.com"   # dikkat: https:// YOK!
+          echo "✅ WEB manifest bulundu."
 
           # Bubblewrap config (JDK + Android SDK)
           mkdir -p ~/.bubblewrap
@@ -65,16 +61,14 @@ jobs:
             --skipPwaValidation \
             --no-input \
             --host=picnic-3.onrender.com \
-            --applicationId=com.onrender.picnic_3.twa \
+            --applicationId=com.onrender.picnic3.twa \
             --name="Picnic Vakti" \
             --launcherName="Picnic" \
             --startUrl="/" \
             --display="standalone" \
-            --fallbackType="customtabs" \
-            --iconUrl="https://picnic-3.onrender.com/static/icons/icon-512.png" \
-            --maskableIconUrl="https://picnic-3.onrender.com/static/icons/icon-512.png"
+            --fallbackType="customtabs"
 
-          echo "✅ TWA initialized successfully."
+          echo "✅ TWA initialized."
 
       - name: Build signed AAB
         shell: bash
