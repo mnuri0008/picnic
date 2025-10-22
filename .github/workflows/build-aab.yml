@@ -5,6 +5,9 @@ on:
   push:
     branches: [ main ]
 
+env:
+  MANIFEST_URL: https://picnic-3.onrender.com/manifest.json
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -31,49 +34,41 @@ jobs:
       - name: Restore signing.keystore from secrets
         shell: bash
         run: |
-          set -euo pipefail
           test -n "${{ secrets.SIGNING_KEYSTORE_BASE64 }}" || { echo "Missing SIGNING_KEYSTORE_BASE64 secret"; exit 1; }
           echo "${{ secrets.SIGNING_KEYSTORE_BASE64 }}" | base64 -d > signing.keystore
           test -s signing.keystore || { echo "signing.keystore could not be created"; exit 1; }
           echo "Keystore restored (size: $(stat -c%s signing.keystore) bytes)"
 
-      # --- TWA init (etkileşimsiz) ---
+      # --- Bubblewrap Config + Init ---
       - name: Prepare and Init TWA (non-interactive, skip validation)
         shell: bash
         run: |
-          set -euo pipefail
           echo "📦 Preparing Bubblewrap config..."
           mkdir -p ~/.bubblewrap
-          cat > ~/.bubblewrap/config.json <<EOF
+          cat > ~/.bubblewrap/config.json <<JSON
           {
-            "jdkPath": "$JAVA_HOME",
+            "jdkPath": "${{ env.JAVA_HOME }}",
             "androidSdkPath": "/usr/local/lib/android/sdk"
           }
-          EOF
+          JSON
 
           echo "🚀 Initializing TWA from manifest file..."
-          # Repodaki twa-manifest.json dosyasını kullanıyoruz
           npx bubblewrap init --manifest=twa-manifest.json --directory . --skipPwaValidation --no-input
+
           echo "✅ TWA initialization complete."
 
-      # --- İmzalı AAB build ---
       - name: Build signed AAB
-        env:
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         shell: bash
         run: |
-          set -euo pipefail
-          npx bubblewrap build \
+          bubblewrap build \
             --signingKey=signing.keystore \
-            --signingKeyAlias="${KEY_ALIAS:-upload}" \
-            --signingKeyPassword="${KEY_PASSWORD:-picnic123}" \
-            --keyStorePassword="${KEYSTORE_PASSWORD:-picnic123}"
+            --signingKeyAlias="${{ secrets.KEY_ALIAS || 'upload' }}" \
+            --signingKeyPassword="${{ secrets.KEY_PASSWORD || 'picnic123' }}" \
+            --keyStorePassword="${{ secrets.KEYSTORE_PASSWORD || 'picnic123' }}"
 
-      # --- Oluşan .aab'ı artefact olarak yükle ---
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
         with:
           name: picnic-aab
-          path: "**/*.aab"
+          path: |
+            **/*.aab
