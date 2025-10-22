@@ -1,4 +1,4 @@
-name: Build AAB from PWA (promptsuz)
+name: Build AAB from PWA
 
 on:
   workflow_dispatch:
@@ -6,9 +6,14 @@ on:
     branches: [ main ]
 
 env:
-  MANIFEST_URL: https://picnic-3.onrender.com/static/manifest.json
-  HOST: picnic-3.onrender.com
+  MANIFEST_URL: https://picnic-3.onrender.com/manifest.json
+  HOST_NAME: picnic-3.onrender.com
   APP_ID: com.onrender.picnic3.twa
+  APP_NAME: Picnic Vakti
+  LAUNCHER_NAME: Picnic
+  START_URL: /
+  DISPLAY_MODE: standalone
+  FALLBACK_TYPE: customtabs
 
 jobs:
   build:
@@ -29,46 +34,68 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install Bubblewrap CLI
+      - name: Install Bubblewrap CLI (pinned)
         run: npm i -g @bubblewrap/cli@1.24.1
 
-      - name: Restore signing.keystore from secrets
+      # Keystore'u secret'tan çıkar (ZORUNLU: SIGNING_KEYSTORE_BASE64)
+      - name: Restore signing.keystore
         shell: bash
         run: |
           set -euo pipefail
           test -n "${{ secrets.SIGNING_KEYSTORE_BASE64 }}" || { echo "Missing SIGNING_KEYSTORE_BASE64 secret"; exit 1; }
           echo "${{ secrets.SIGNING_KEYSTORE_BASE64 }}" | base64 -d > signing.keystore
           test -s signing.keystore || { echo "signing.keystore could not be created"; exit 1; }
-          echo "Keystore OK (size: $(stat -c%s signing.keystore) bytes)"
+          echo "✅ Keystore restored (size: $(stat -c%s signing.keystore) bytes)"
 
-      - name: Init TWA from WEB manifest (no prompts)
+      # Bubblewrap config (JDK/SDK yolları)
+      - name: Configure Bubblewrap
         shell: bash
         run: |
           set -euo pipefail
-
-          # Bubblewrap config (JDK / Android SDK yolları)
           mkdir -p ~/.bubblewrap
           cat > ~/.bubblewrap/config.json <<JSON
-          { "jdkPath": "${{ env.JAVA_HOME }}", "androidSdkPath": "/usr/local/lib/android/sdk" }
+          {
+            "jdkPath": "${{ env.JAVA_HOME }}",
+            "androidSdkPath": "/usr/local/lib/android/sdk"
+          }
           JSON
 
-          # Promptsuz init: bütün sorulara otomatik boş yanıt
-          yes "" | npx bubblewrap init \
-            --manifest="${{ env.MANIFEST_URL }}" \
+      # Manifest erişilebilir mi?
+      - name: Check manifest URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -sSIL "$MANIFEST_URL" | head -n1
+
+      # INIT’i promptsuz çalıştır: keystore yolu ve alias'ı stdin ile besle
+      - name: Init TWA (non-interactive)
+        shell: bash
+        env:
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          KEYSTORE_PATH="$GITHUB_WORKSPACE/signing.keystore"
+          ALIAS="${KEY_ALIAS:-upload}"
+
+          # Bubblewrap bazı runner'larda android.keystore varsayılanını arıyor; yoksa sormasın diye temizle
+          rm -f "$GITHUB_WORKSPACE/android.keystore" || true
+
+          # İki promptu (keystore path + alias) otomatik veriyoruz
+          printf "%s\n%s\n" "$KEYSTORE_PATH" "$ALIAS" | npx bubblewrap init \
+            --manifest="$MANIFEST_URL" \
             --directory . \
             --skipPwaValidation \
             --no-input \
-            --host="${{ env.HOST }}" \
-            --applicationId="${{ env.APP_ID }}" \
-            --name="Picnic Vakti" \
-            --launcherName="Picnic" \
-            --startUrl="/" \
-            --display="standalone" \
-            --fallbackType="customtabs" \
-            --iconUrl="https://picnic-3.onrender.com/static/icons/icon-512.png" \
-            --maskableIconUrl="https://picnic-3.onrender.com/static/icons/icon-512.png"
+            --host="$HOST_NAME" \
+            --applicationId="$APP_ID" \
+            --name="$APP_NAME" \
+            --launcherName="$LAUNCHER_NAME" \
+            --startUrl="$START_URL" \
+            --display="$DISPLAY_MODE" \
+            --fallbackType="$FALLBACK_TYPE"
 
-      - name: Build signed AAB
+      # İmzalı AAB build (promptsuz)
+      - name: Build signed AAB (no prompts)
         shell: bash
         env:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
@@ -76,12 +103,17 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          npx bubblewrap build \
-            --signingKey=signing.keystore \
-            --signingKeyAlias="${KEY_ALIAS:-upload}" \
-            --signingKeyPassword="${KEY_PASSWORD:-picnic123}" \
-            --keyStorePassword="${KEYSTORE_PASSWORD:-picnic123}"
+          KEYSTORE_PATH="$GITHUB_WORKSPACE/signing.keystore"
+          test -s "$KEYSTORE_PATH" || { echo "Keystore not found at $KEYSTORE_PATH"; exit 1; }
 
+          npx bubblewrap build \
+            --no-input \
+            --signingKey="$KEYSTORE_PATH" \
+            --signingKeyAlias="${KEY_ALIAS:-upload}" \
+            --keyStorePassword="${KEYSTORE_PASSWORD:-picnic123}" \
+            --signingKeyPassword="${KEY_PASSWORD:-picnic123}"
+
+      # .aab çıktısını artefakt olarak yükle
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
         with:
