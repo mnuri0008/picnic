@@ -8,6 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,9 +24,10 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Install Bubblewrap CLI (pin)
+      - name: Install Bubblewrap CLI
         run: npm i -g @bubblewrap/cli@1.24.1
 
+      # --- Keystore'u secrets'tan geri yükle ---
       - name: Restore signing.keystore from secrets
         shell: bash
         run: |
@@ -35,8 +37,48 @@ jobs:
           test -s signing.keystore || { echo "signing.keystore could not be created"; exit 1; }
           echo "✅ Keystore restored (size: $(stat -c%s signing.keystore) bytes)"
 
-         - name: Init TWA from local WEB manifest (no prompts)
-      
+      # --- TWA INIT (Manifest + HTTPS host ile) ---
+      - name: Init TWA from local WEB manifest (no prompts)
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "🧩 Checking WEB manifest file..."
+          test -f static/manifest.json || { echo "❌ static/manifest.json yok"; ls -la static || true; exit 1; }
+
+          echo "✅ WEB manifest bulundu, başlatılıyor..."
+          mkdir -p ~/.bubblewrap
+          cat > ~/.bubblewrap/config.json <<JSON
+          {
+            "jdkPath": "${{ env.JAVA_HOME }}",
+            "androidSdkPath": "/usr/local/lib/android/sdk"
+          }
+          JSON
+
+          HOST="https://picnic-3.onrender.com"
+          echo "🔗 Using host: $HOST"
+
+          # Basit URL kontrolü
+          node -e "const fs=require('fs');const m=JSON.parse(fs.readFileSync('static/manifest.json','utf8'));const h='$HOST';function ok(p){new URL(p,h)};if(m.start_url)ok(m.start_url);if(Array.isArray(m.icons))m.icons.forEach(i=>ok(i.src));console.log('✅ Manifest URL check OK');"
+
+          echo "🚀 Running Bubblewrap init..."
+          npx bubblewrap init \
+            --manifest=static/manifest.json \
+            --directory . \
+            --skipPwaValidation \
+            --no-input \
+            --host=$HOST \
+            --applicationId=com.onrender.picnic_3.twa \
+            --name="Picnic Vakti" \
+            --launcherName="Picnic" \
+            --startUrl="/" \
+            --display="standalone" \
+            --fallbackType="customtabs" \
+            --iconUrl="$HOST/static/icons/icon-512.png" \
+            --maskableIconUrl="$HOST/static/icons/icon-512.png"
+
+          echo "✅ TWA initialized successfully."
+
+      # --- Build imzalı .AAB ---
       - name: Build signed AAB
         shell: bash
         env:
@@ -51,6 +93,7 @@ jobs:
             --signingKeyPassword="${KEY_PASSWORD:-picnic123}" \
             --keyStorePassword="${KEYSTORE_PASSWORD:-picnic123}"
 
+      # --- Artifakt yükleme ---
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
         with:
