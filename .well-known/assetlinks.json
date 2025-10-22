@@ -1,11 +1,8 @@
-[
-  {
-    "relation": ["delegate_permission/common.handle_all_urls"],
-    "target": {
-      "namespace": "android_app",
-      "package_name": "com.onrender.picnic_3.twa",
-      "sha256_cert_fingerprints":
-        ["95:FA:3B:74:B6:39:65:8E:FA:7E:E6:49:D5:01:45:1E:CE:C9:16:35:C8:49:2A:8B:76:B0:DC:29:C2:19:70:8A"]
-    }
-  }
-]
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "com.onrender.picnic_3.twa",
+        "sha256_cert_fingerprints": ["D4:F8:72:AF:EC:01:20:04:8A:10:46:82:8B:7D:B7:4C:12:46:2D:94:F4:7C:6B:13:3E:35:54:DA:DA:B9:49:7E"]
+      }
+    }]
