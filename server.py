@@ -30,8 +30,9 @@ def picnic_icon_512():
 # ------- PWA DOSYALARI (manifest + service worker) -------
 @app.route('/manifest.json')
 def manifest():
-    resp = make_response(send_from_directory(app.static_folder, 'manifest.json'))
+    resp = make_response(send_from_directory('static', 'manifest.json'))
     resp.mimetype = 'application/manifest+json'
+    resp.headers['Cache-Control'] = 'no-store, max-age=0'
     return resp
 
 @app.route('/service-worker.js')
