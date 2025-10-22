@@ -24,10 +24,10 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Install Bubblewrap CLI
+      - name: Install Bubblewrap CLI (pin 1.24.1)
         run: npm i -g @bubblewrap/cli@1.24.1
 
-      # --- Keystore'u secrets'tan geri yükle ---
+      # Keystore'u secret'tan geri yükle (zorunlu)
       - name: Restore signing.keystore from secrets
         shell: bash
         run: |
@@ -37,15 +37,19 @@ jobs:
           test -s signing.keystore || { echo "signing.keystore could not be created"; exit 1; }
           echo "✅ Keystore restored (size: $(stat -c%s signing.keystore) bytes)"
 
-      # --- TWA INIT (Manifest + HTTPS host ile) ---
+      # TWA init - local manifest + no prompts
       - name: Init TWA from local WEB manifest (no prompts)
         shell: bash
         run: |
           set -euo pipefail
+
           echo "🧩 Checking WEB manifest file..."
-          test -f static/manifest.json || { echo "❌ static/manifest.json yok"; ls -la static || true; exit 1; }
+          test -f static/manifest.json || { echo "❌ static/manifest.json bulunamadı!"; ls -la static || true; exit 1; }
 
           echo "✅ WEB manifest bulundu, başlatılıyor..."
+          echo "🔗 Using host: picnic-3.onrender.com"   # dikkat: https:// YOK!
+
+          # Bubblewrap config (JDK + Android SDK)
           mkdir -p ~/.bubblewrap
           cat > ~/.bubblewrap/config.json <<JSON
           {
@@ -54,31 +58,24 @@ jobs:
           }
           JSON
 
-          HOST="https://picnic-3.onrender.com"
-          echo "🔗 Using host: $HOST"
-
-          # Basit URL kontrolü
-          node -e "const fs=require('fs');const m=JSON.parse(fs.readFileSync('static/manifest.json','utf8'));const h='$HOST';function ok(p){new URL(p,h)};if(m.start_url)ok(m.start_url);if(Array.isArray(m.icons))m.icons.forEach(i=>ok(i.src));console.log('✅ Manifest URL check OK');"
-
-          echo "🚀 Running Bubblewrap init..."
+          echo "🚀 Running Bubblewrap init (non-interactive)…"
           npx bubblewrap init \
             --manifest=static/manifest.json \
             --directory . \
             --skipPwaValidation \
             --no-input \
-            --host=$HOST \
+            --host=picnic-3.onrender.com \
             --applicationId=com.onrender.picnic_3.twa \
             --name="Picnic Vakti" \
             --launcherName="Picnic" \
             --startUrl="/" \
             --display="standalone" \
             --fallbackType="customtabs" \
-            --iconUrl="$HOST/static/icons/icon-512.png" \
-            --maskableIconUrl="$HOST/static/icons/icon-512.png"
+            --iconUrl="https://picnic-3.onrender.com/static/icons/icon-512.png" \
+            --maskableIconUrl="https://picnic-3.onrender.com/static/icons/icon-512.png"
 
           echo "✅ TWA initialized successfully."
 
-      # --- Build imzalı .AAB ---
       - name: Build signed AAB
         shell: bash
         env:
@@ -86,14 +83,12 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          set -euo pipefail
           npx bubblewrap build \
             --signingKey=signing.keystore \
             --signingKeyAlias="${KEY_ALIAS:-upload}" \
             --signingKeyPassword="${KEY_PASSWORD:-picnic123}" \
             --keyStorePassword="${KEYSTORE_PASSWORD:-picnic123}"
 
-      # --- Artifakt yükleme ---
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
         with:
