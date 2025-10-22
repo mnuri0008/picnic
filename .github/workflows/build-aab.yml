@@ -40,12 +40,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           echo "🧩 Checking WEB manifest file..."
           test -f static/manifest.json || { echo "❌ static/manifest.json bulunamadı!"; ls -la static || true; exit 1; }
           echo "✅ WEB manifest bulundu."
-
-          # Bubblewrap config (JDK + Android SDK)
           mkdir -p ~/.bubblewrap
           cat > ~/.bubblewrap/config.json <<JSON
           {
@@ -53,7 +50,6 @@ jobs:
             "androidSdkPath": "/usr/local/lib/android/sdk"
           }
           JSON
-
           echo "🚀 Running Bubblewrap init (non-interactive)…"
           npx bubblewrap init \
             --manifest=static/manifest.json \
@@ -67,7 +63,6 @@ jobs:
             --startUrl="/" \
             --display="standalone" \
             --fallbackType="customtabs"
-
           echo "✅ TWA initialized."
 
       - name: Build signed AAB
