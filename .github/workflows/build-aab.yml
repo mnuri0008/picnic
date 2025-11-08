@@ -19,10 +19,18 @@ jobs:
       KEY_ALIAS: ${{ secrets.KEY_ALIAS != '' && secrets.KEY_ALIAS || 'upload' }}
       KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD != '' && secrets.KEYSTORE_PASSWORD || 'picnic123' }}
       KEY_PASSWORD: ${{ secrets.KEY_PASSWORD != '' && secrets.KEY_PASSWORD || 'picnic123' }}
+     steps:
+  - name: Checkout
+    uses: actions/checkout@v4
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+  - name: Auto increment versionCode
+    run: |
+      VERSION_CODE=$(date +%s)
+      sed -i "s/versionCode [0-9]*/versionCode $VERSION_CODE/" mobile/android/app/build.gradle
+
+  - name: Setup Java 21
+    uses: actions/setup-java@v4
+4
 
       # ---- Java 21 (hata "invalid source release: 21" için) ----
       - name: Setup Java 21
