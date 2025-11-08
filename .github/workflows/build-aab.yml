@@ -19,18 +19,15 @@ jobs:
       KEY_ALIAS: ${{ secrets.KEY_ALIAS != '' && secrets.KEY_ALIAS || 'upload' }}
       KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD != '' && secrets.KEYSTORE_PASSWORD || 'picnic123' }}
       KEY_PASSWORD: ${{ secrets.KEY_PASSWORD != '' && secrets.KEY_PASSWORD || 'picnic123' }}
-     steps:
-  - name: Checkout
-    uses: actions/checkout@v4
 
-  - name: Auto increment versionCode
-    run: |
-      VERSION_CODE=$(date +%s)
-      sed -i "s/versionCode [0-9]*/versionCode $VERSION_CODE/" mobile/android/app/build.gradle
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-  - name: Setup Java 21
-    uses: actions/setup-java@v4
-4
+      - name: Auto increment versionCode
+        run: |
+          VERSION_CODE=$(date +%s)
+          sed -i "s/versionCode [0-9]*/versionCode $VERSION_CODE/" mobile/android/app/build.gradle
 
       # ---- Java 21 (hata "invalid source release: 21" için) ----
       - name: Setup Java 21
@@ -85,13 +82,7 @@ jobs:
             echo "✅ Keystore restored (size: $(stat -c%s upload.keystore) bytes)"
           else
             echo "⚠️ SIGNING_KEYSTORE_BASE64 yok; release yine de derlenecek ama imza bu dosyayla yapılacak: mobile/android/app/upload.keystore (dummy)."
-            keytool -genkeypair -v \
-              -keystore upload.keystore \
-              -storepass "${KEYSTORE_PASSWORD}" \
-              -keypass "${KEY_PASSWORD}" \
-              -alias "${KEY_ALIAS}" \
-              -keyalg RSA -keysize 2048 -validity 3650 \
-              -dname "CN=Picnic,O=Picnic,L=,S=,C=TR"
+            keytool -genkeypair -v               -keystore upload.keystore               -storepass "${KEYSTORE_PASSWORD}"               -keypass "${KEY_PASSWORD}"               -alias "${KEY_ALIAS}"               -keyalg RSA -keysize 2048 -validity 3650               -dname "CN=Picnic,O=Picnic,L=,S=,C=TR"
           fi
 
       # ---- Gradle release imzasını ekle ----
