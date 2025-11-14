@@ -71,17 +71,22 @@ jobs:
         working-directory: mobile
         run: npx cap add android
 
-      # ---- Android launcher icon dosyalarını güncelle ----
-      - name: Apply custom Android launcher icon
+      # ---- Android launcher ikonlarını capacitor-assets ile üret ----
+      - name: Generate Android icons (Capacitor)
         working-directory: mobile
         run: |
-          # Sadece dpi-v4 klasörlerine PNG kopyala (mdpi, hdpi, xhdpi, xxhdpi, xxxhdpi)
-          for d in android/app/src/main/res/mipmap-*-v4; do
-            echo "Updating icons in $d ..."
-            cp resources/icon.png "$d/ic_launcher.png" || true
-            cp resources/icon.png "$d/ic_launcher_round.png" || true
-          done
-          echo "Skipping adaptive icon folders (mipmap-anydpi-v26)"
+          npm install -D @capacitor/assets
+
+          cat > assets.config.json <<JSON
+          {
+            "appIcon": {
+              "imagePath": "resources/icon.png"
+            }
+          }
+          JSON
+
+          # assets.config.json'a göre tüm platform ikonlarını üretir
+          npx capacitor-assets generate
 
       - name: Auto increment versionCode
         working-directory: mobile/android/app
@@ -122,7 +127,6 @@ jobs:
         run: |
           set -euo pipefail
           BGF=build.gradle
-          # signingConfigs.release + buildTypes.release patch
           awk '
             BEGIN{gotAndroid=0; gotBuildTypes=0}
             /android \{/ && gotAndroid==0 {
