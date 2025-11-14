@@ -24,39 +24,124 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Setup Java
+      # ---- Java 21 (hata "invalid source release: 21" için) ----
+      - name: Setup Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
-      # Eğer web tarafında build gerekiyorsa (React/Vue vs.) burada yap
-      - name: Install npm deps
-        working-directory: mobile
-        run: npm ci
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
-      - name: Build web assets
+      - name: Install Capacitor toolchain
+        run: |
+          npm i -g npm@10
+          mkdir mobile && cd mobile
+          npm init -y
+          npm i @capacitor/core @capacitor/cli @capacitor/android
+
+      - name: Create Capacitor config (remote site)
         working-directory: mobile
         run: |
-          # Projene göre düzenle:
-          # npm run build
-          npm run build || echo "Özel build komutun yoksa bu satırı proje komutuna göre değiştir"
+          cat > capacitor.config.json <<JSON
+          {
+            "appId": "${APP_ID}",
+            "appName": "${APP_NAME}",
+            "webDir": "dist",
+            "bundledWebRuntime": false,
+            "server": {
+              "url": "${SITE_URL}",
+              "cleartext": false
+            }
+          }
+          JSON
+          mkdir -p dist
+          echo "<html><body>Capacitor shell</body></html>" > dist/index.html
 
-      - name: Sync Capacitor Android
+      # 🔹 PNG ikonunu Android için resources klasörüne kopyala
+      - name: Copy app icon into Capacitor resources
+        run: |
+          mkdir -p mobile/resources
+          cp static/icons/icon-512.png mobile/resources/icon.png
+
+      - name: Add Android platform
         working-directory: mobile
-        run: npx cap sync android
+        run: npx cap add android
 
-      # 🔥 İŞTE İKON BLOĞU
+      # 🔹 Capacitor ile Android launcher iconlarını üret
       - name: Generate Android icons (Capacitor)
         working-directory: mobile
         run: |
+          npm install -D @capacitor/assets
           npx capacitor-assets android --iconPath resources/icon.png
 
+      - name: Auto increment versionCode
+        working-directory: mobile/android/app
+        run: |
+          VERSION_CODE=$(date +%s)
+          if [ -f build.gradle ]; then
+            sed -i "s/versionCode [0-9]*/versionCode $VERSION_CODE/" build.gradle
+            echo "Updated versionCode to $VERSION_CODE"
+          else
+            echo "Warning: build.gradle not found at mobile/android/app; skipping versionCode update"
+          fi
+
+      # ---- Keystore'u secrets'tan çıkar ----
+      - name: Restore signing keystore
+        working-directory: mobile/android/app
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${{ secrets.SIGNING_KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.SIGNING_KEYSTORE_BASE64 }}" | base64 -d > upload.keystore
+            test -s upload.keystore || { echo "upload.keystore could not be created"; exit 1; }
+            echo "✅ Keystore restored (size: $(stat -c%s upload.keystore) bytes)"
+          else
+            echo "⚠️ SIGNING_KEYSTORE_BASE64 yok; release yine de derlenecek ama imza bu dosyayla yapılacak: mobile/android/app/upload.keystore (dummy)."
+            keytool -genkeypair -v               -keystore upload.keystore               -storepass "${KEYSTORE_PASSWORD}"               -keypass "${KEY_PASSWORD}"               -alias "${KEY_ALIAS}"               -keyalg RSA -keysize 2048 -validity 3650               -dname "CN=Picnic,O=Picnic,L=,S=,C=TR"
+          fi
+
+      # ---- Gradle release imzasını ekle ----
+      - name: Configure Gradle signing for release
+        working-directory: mobile/android/app
+        shell: bash
+        run: |
+          set -euo pipefail
+          BGF=build.gradle
+          # signingConfigs.release + buildTypes.release patch
+          awk '
+            BEGIN{gotAndroid=0; gotBuildTypes=0}
+            /android \{/ && gotAndroid==0 {
+              print; print "    signingConfigs {"; 
+              print "        release {"; 
+              print "            storeFile file(\"upload.keystore\")"; 
+              print "            storePassword System.getenv(\"KEYSTORE_PASSWORD\")"; 
+              print "            keyAlias System.getenv(\"KEY_ALIAS\")"; 
+              print "            keyPassword System.getenv(\"KEY_PASSWORD\")"; 
+              print "        }"; 
+              print "    }";
+              gotAndroid=1; next
+            }
+            /buildTypes \{/ && gotBuildTypes==0 {
+              print; 
+              print "        release {"; 
+              print "            signingConfig signingConfigs.release"; 
+              print "            minifyEnabled false"; 
+              print "            shrinkResources false"; 
+              print "        }";
+              gotBuildTypes=1; next
+            }
+            {print}
+          ' "$BGF" > tmp.gradle && mv tmp.gradle "$BGF"
+
+          # Java toolchain/compat ayarları (Java 21 derlenebilir, bağımlılıklar 17 istese bile uyumlu)
+          # app ve capacitor modülleri için gradle.properties üzerinden JDK yolu da sabitleyelim.
+          echo "org.gradle.java.home=$JAVA_HOME" >> ../gradle.properties
+
+      # ---- AAB derle ----
       - name: Build AAB (bundleRelease)
         working-directory: mobile/android
         env:
