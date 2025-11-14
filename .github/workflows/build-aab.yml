@@ -74,20 +74,19 @@ jobs:
       # -------------------------------------------------------
       #  ANDROID İKON ÜRETME (HATA'SIZ ÇALIŞAN YÖNTEM)
       # -------------------------------------------------------
-      - name: Generate Android icons (Capacitor)
+      - name: Apply custom Android launcher icon
         working-directory: mobile
         run: |
-          npm install -D @capacitor/assets
+          # resources/icon.png zaten daha önce:
+          # Copy app icon into Capacitor resources adımında
+          # static/icons/icon-512.png'den kopyalandı.
 
-          cat > assets.config.json <<JSON
-          {
-            "appIcon": {
-              "imagePath": "resources/icon.png"
-            }
-          }
-          JSON
+          for d in android/app/src/main/res/mipmap-*; do
+            echo "Updating icons in $d"
+            cp resources/icon.png "$d/ic_launcher.png" || true
+            cp resources/icon.png "$d/ic_launcher_round.png" || true
+          done
 
-          npx capacitor-assets generate --platform android
 
       - name: Auto increment versionCode
         working-directory: mobile/android/app
