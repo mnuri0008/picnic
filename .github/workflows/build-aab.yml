@@ -42,9 +42,6 @@ jobs:
         run: |
           set -e
 
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
           sdkmanager "platforms;android-36"
 
@@ -59,7 +56,10 @@ jobs:
           cd mobile
 
           npm init -y
-          npm install @capacitor/core @capacitor/cli @capacitor/android
+          npm install \
+            @capacitor/core@7 \
+            @capacitor/cli@7 \
+            @capacitor/android@7
 
       - name: Create Capacitor configuration
         working-directory: mobile
@@ -87,7 +87,10 @@ jobs:
           <html lang="tr">
           <head>
             <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <meta
+              name="viewport"
+              content="width=device-width, initial-scale=1.0"
+            >
             <title>Picnic Vakti</title>
           </head>
           <body>
@@ -102,7 +105,16 @@ jobs:
           set -e
 
           mkdir -p mobile/resources
-          cp static/icons/icon-512.png mobile/resources/icon.png
+
+          if [ -f "static/icons/icon-512.png" ]; then
+            cp static/icons/icon-512.png mobile/resources/icon.png
+          elif [ -f "static/icon-512.png" ]; then
+            cp static/icon-512.png mobile/resources/icon.png
+          else
+            echo "Application icon was not found."
+            find static -maxdepth 3 -type f || true
+            exit 1
+          fi
 
       - name: Add Android platform
         working-directory: mobile
@@ -111,7 +123,7 @@ jobs:
           set -e
           npx cap add android
 
-      - name: Set compile SDK and target SDK to API 36
+      - name: Set Android API 36
         working-directory: mobile
         shell: bash
         run: |
@@ -121,14 +133,14 @@ jobs:
           from pathlib import Path
           import re
 
-          file_path = Path("android/variables.gradle")
+          variables_file = Path("android/variables.gradle")
 
-          if not file_path.exists():
+          if not variables_file.exists():
               raise FileNotFoundError(
-                  f"Could not find Capacitor variables file: {file_path}"
+                  f"File not found: {variables_file}"
               )
 
-          text = file_path.read_text(encoding="utf-8")
+          text = variables_file.read_text(encoding="utf-8")
 
           text, compile_count = re.subn(
               r"compileSdkVersion\s*=\s*\d+",
@@ -145,16 +157,50 @@ jobs:
           )
 
           if compile_count != 1:
-              raise RuntimeError("compileSdkVersion could not be updated.")
+              raise RuntimeError(
+                  "compileSdkVersion could not be changed."
+              )
 
           if target_count != 1:
-              raise RuntimeError("targetSdkVersion could not be updated.")
+              raise RuntimeError(
+                  "targetSdkVersion could not be changed."
+              )
 
-          file_path.write_text(text, encoding="utf-8")
+          variables_file.write_text(text, encoding="utf-8")
           PY
 
-          echo "Updated Android SDK configuration:"
+          if ! grep -q \
+            "android.suppressUnsupportedCompileSdk=36" \
+            android/gradle.properties
+          then
+            echo \
+              "android.suppressUnsupportedCompileSdk=36" \
+              >> android/gradle.properties
+          fi
+
+          echo "Android SDK settings:"
           cat android/variables.gradle
+
+      - name: Fix Kotlin duplicate classes
+        working-directory: mobile
+        shell: bash
+        run: |
+          set -e
+
+          cat >> android/build.gradle <<'EOF'
+
+          subprojects {
+              configurations.configureEach {
+                  resolutionStrategy {
+                      force "org.jetbrains.kotlin:kotlin-stdlib:1.8.22"
+                      force "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22"
+                      force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22"
+                  }
+              }
+          }
+          EOF
+
+          echo "Kotlin dependency resolution configured."
 
       - name: Generate Android icons
         working-directory: mobile
@@ -164,15 +210,10 @@ jobs:
 
           npm install --save-dev @capacitor/assets
 
-          cat > assets.config.json <<EOF
-          {
-            "appIcon": {
-              "imagePath": "resources/icon.png"
-            }
-          }
-          EOF
-
-          npx capacitor-assets generate
+          npx capacitor-assets generate \
+            --android \
+            --iconBackgroundColor "#ffffff" \
+            --iconBackgroundColorDark "#ffffff"
 
       - name: Set application version
         working-directory: mobile
@@ -191,14 +232,14 @@ jobs:
           version_code = sys.argv[1]
           version_name = sys.argv[2]
 
-          file_path = Path("android/app/build.gradle")
+          build_file = Path("android/app/build.gradle")
 
-          if not file_path.exists():
+          if not build_file.exists():
               raise FileNotFoundError(
-                  f"Could not find Android build file: {file_path}"
+                  f"File not found: {build_file}"
               )
 
-          text = file_path.read_text(encoding="utf-8")
+          text = build_file.read_text(encoding="utf-8")
 
           text, code_count = re.subn(
               r"versionCode\s+\d+",
@@ -215,12 +256,16 @@ jobs:
           )
 
           if code_count != 1:
-              raise RuntimeError("versionCode could not be updated.")
+              raise RuntimeError(
+                  "versionCode could not be changed."
+              )
 
           if name_count != 1:
-              raise RuntimeError("versionName could not be updated.")
+              raise RuntimeError(
+                  "versionName could not be changed."
+              )
 
-          file_path.write_text(text, encoding="utf-8")
+          build_file.write_text(text, encoding="utf-8")
           PY
 
           echo "Version code: $VERSION_CODE"
@@ -234,17 +279,18 @@ jobs:
 
           if [ -n "${{ secrets.SIGNING_KEYSTORE_BASE64 }}" ]; then
             echo "${{ secrets.SIGNING_KEYSTORE_BASE64 }}" \
-              | base64 --decode > upload.keystore
+              | base64 --decode \
+              > upload.keystore
 
             if [ ! -s upload.keystore ]; then
-              echo "Keystore file could not be restored."
+              echo "Keystore could not be restored."
               exit 1
             fi
 
             echo "Existing signing keystore restored."
           else
-            echo "SIGNING_KEYSTORE_BASE64 secret was not found."
-            echo "A temporary upload keystore will be generated."
+            echo "No saved keystore secret was found."
+            echo "A temporary upload key will be generated."
 
             keytool -genkeypair \
               -v \
@@ -255,7 +301,8 @@ jobs:
               -keyalg RSA \
               -keysize 2048 \
               -validity 10000 \
-              -dname "CN=Picnic Vakti, OU=Mobile, O=Picnic, L=Istanbul, ST=Istanbul, C=TR"
+              -dname \
+              "CN=Picnic Vakti, OU=Mobile, O=Picnic, L=Istanbul, ST=Istanbul, C=TR"
           fi
 
           test -s upload.keystore
@@ -270,16 +317,16 @@ jobs:
           from pathlib import Path
           import re
 
-          file_path = Path("android/app/build.gradle")
+          build_file = Path("android/app/build.gradle")
 
-          if not file_path.exists():
+          if not build_file.exists():
               raise FileNotFoundError(
-                  f"Could not find Android build file: {file_path}"
+                  f"File not found: {build_file}"
               )
 
-          text = file_path.read_text(encoding="utf-8")
+          text = build_file.read_text(encoding="utf-8")
 
-          signing_config = """
+          signing_block = """
               signingConfigs {
                   release {
                       storeFile file("upload.keystore")
@@ -293,14 +340,14 @@ jobs:
           if "signingConfigs {" not in text:
               text, android_count = re.subn(
                   r"android\s*\{",
-                  lambda match: match.group(0) + signing_config,
+                  lambda match: match.group(0) + signing_block,
                   text,
                   count=1,
               )
 
               if android_count != 1:
                   raise RuntimeError(
-                      "The android configuration block could not be found."
+                      "Android configuration block was not found."
                   )
 
           if "signingConfig signingConfigs.release" not in text:
@@ -314,13 +361,13 @@ jobs:
 
               if release_count != 1:
                   raise RuntimeError(
-                      "The release build type could not be found."
+                      "Release build block was not found."
                   )
 
-          file_path.write_text(text, encoding="utf-8")
+          build_file.write_text(text, encoding="utf-8")
           PY
 
-          echo "Release signing configuration added."
+          echo "Release signing configured."
 
       - name: Verify Android configuration
         working-directory: mobile
@@ -331,11 +378,15 @@ jobs:
           echo "----- variables.gradle -----"
           cat android/variables.gradle
 
-          echo "----- version information -----"
-          grep -n "versionCode\|versionName" android/app/build.gradle
+          echo "----- version -----"
+          grep -n \
+            "versionCode\|versionName" \
+            android/app/build.gradle
 
-          echo "----- signing information -----"
-          grep -n "signingConfigs\|signingConfig" android/app/build.gradle
+          echo "----- signing -----"
+          grep -n \
+            "signingConfigs\|signingConfig" \
+            android/app/build.gradle
 
       - name: Build signed Android App Bundle
         working-directory: mobile/android
@@ -344,10 +395,17 @@ jobs:
           set -euo pipefail
 
           chmod +x gradlew
-          ./gradlew --no-daemon clean bundleRelease
+
+          ./gradlew \
+            --no-daemon \
+            --stacktrace \
+            clean \
+            bundleRelease
 
           echo "Generated AAB files:"
-          find app/build/outputs/bundle/release \
+
+          find \
+            app/build/outputs/bundle/release \
             -type f \
             -name "*.aab" \
             -print
