@@ -71,6 +71,32 @@ jobs:
         working-directory: mobile
         run: npx cap add android
 
+      # ---- Google Play zorunluluğu: Android 16 / API 36 ----
+      - name: Install Android API 36 and set target SDK
+        working-directory: mobile/android
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+          # Capacitor Android sürümlerinde SDK değerleri çoğunlukla variables.gradle içindedir.
+          if [ -f variables.gradle ]; then
+            sed -i -E 's/compileSdkVersion[[:space:]]*=[[:space:]]*[0-9]+/compileSdkVersion = 36/' variables.gradle
+            sed -i -E 's/targetSdkVersion[[:space:]]*=[[:space:]]*[0-9]+/targetSdkVersion = 36/' variables.gradle
+          fi
+
+          # Farklı şablon ihtimaline karşı app/build.gradle dosyasını da güncelle.
+          if [ -f app/build.gradle ]; then
+            sed -i -E 's/compileSdkVersion[[:space:]]+[0-9]+/compileSdkVersion 36/' app/build.gradle
+            sed -i -E 's/targetSdkVersion[[:space:]]+[0-9]+/targetSdkVersion 36/' app/build.gradle
+            sed -i -E 's/compileSdk[[:space:]]+[0-9]+/compileSdk 36/' app/build.gradle
+            sed -i -E 's/targetSdk[[:space:]]+[0-9]+/targetSdk 36/' app/build.gradle
+          fi
+
+          echo "---- SDK configuration ----"
+          grep -R -n -E 'compileSdk|targetSdk' variables.gradle app/build.gradle 2>/dev/null || true
+
       # ---- Android launcher ikonlarını capacitor-assets ile üret ----
       - name: Generate Android icons (Capacitor)
         working-directory: mobile
